@@ -1,0 +1,51 @@
+# ── Python ─────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist-info/
+.eggs/
+
+# ── Virtual environments ───────────────────────────────────────────────────────
+venv/
+.venv/
+env/
+.env/
+
+# ── Secrets — commit .env.example instead, never .env ─────────────────────────
+.env
+server/.env
+agent/.env
+
+# ── Runtime / generated data ───────────────────────────────────────────────────
+*.db
+*.db-shm
+*.db-wal
+server/old.db
+
+# ── Agent runtime files ────────────────────────────────────────────────────────
+agent/agent_creds.json
+agent/agent_settings.json
+
+# ── PyInstaller build output ───────────────────────────────────────────────────
+agent/build/
+agent/dist/
+agent/*.spec
+
+# ── IDE / editor ───────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.suo
+*.user
+.vs/
+
+# ── Claude Code internal ───────────────────────────────────────────────────────
+.claude/
+
+# ── OS ─────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini

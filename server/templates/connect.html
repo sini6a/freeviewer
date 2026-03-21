@@ -1,0 +1,183 @@
+{% extends "base.html" %}
+{% block title %}{{ device["display_name"] }} | FreeViewer{% endblock %}
+
+{% block content %}
+<div class="connect-layout">
+
+    <div class="d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center gap-3">
+            <a href="{{ url_for('dashboard') }}" class="btn-ghost" style="padding:.4rem .65rem;">
+                <i class="bi bi-arrow-left"></i>
+            </a>
+            <div>
+                <div style="font-size:1rem;font-weight:700;color:#0f172a;line-height:1.2;">
+                    {{ device["display_name"] }}
+                </div>
+                <div style="font-size:.75rem;color:#94a3b8;font-family:monospace;">
+                    {{ device["device_code"] }}
+                </div>
+            </div>
+        </div>
+
+        <span id="conn-status" class="fv-badge connecting">
+            <span class="fv-badge-dot" id="conn-dot" style="background:#ca8a04;"></span>
+            <span id="conn-label">Connecting…</span>
+        </span>
+    </div>
+
+    <div class="connect-video-wrap">
+        <video id="remoteVideo" autoplay playsinline></video>
+    </div>
+
+    <p style="font-size:.74rem;color:#94a3b8;text-align:center;margin:0;">
+        Left / right / middle click &middot; Scroll &middot; Full keyboard including Ctrl, Alt, Shift
+    </p>
+
+    <pre id="fv-debug" style="font-size:.72rem;color:#94a3b8;background:#0f172a;border:1px solid #334155;
+         border-radius:6px;padding:.6rem 1rem;max-height:120px;overflow-y:auto;margin-top:.5rem;
+         white-space:pre-wrap;word-break:break-all;"></pre>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const DEVICE_ID = "{{ device['device_code'] }}";
+    const socket = io();
+    let pc, dc, answerTimeout;
+
+    function setStatus(state) {
+        const badge = document.getElementById('conn-status');
+        const dot   = document.getElementById('conn-dot');
+        const label = document.getElementById('conn-label');
+        if (state === 'connected') {
+            badge.className = 'fv-badge online';
+            dot.style.background = '#16a34a';
+            label.textContent = 'Connected';
+        } else if (state === 'disconnected') {
+            badge.className = 'fv-badge error';
+            dot.style.background = '#dc2626';
+            label.textContent = 'Disconnected';
+        } else {
+            badge.className = 'fv-badge connecting';
+            dot.style.background = '#ca8a04';
+            label.textContent = 'Connecting…';
+        }
+    }
+
+    function dbg(msg) {
+        console.log('[FV]', msg);
+        const el = document.getElementById('fv-debug');
+        if (el) { el.textContent += msg + '\n'; el.scrollTop = el.scrollHeight; }
+    }
+
+    async function startSession() {
+        let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+        try {
+            const r = await fetch('/api/ice-config');
+            const cfg = await r.json();
+            dbg('ICE config: ' + JSON.stringify(cfg.iceServers));
+            if (cfg.iceServers?.length) iceServers = cfg.iceServers;
+        } catch (e) { dbg('ICE config fetch failed: ' + e); }
+
+        pc = new RTCPeerConnection({ iceServers });
+        dc = pc.createDataChannel("control");
+        pc.addTransceiver('video', { direction: 'recvonly' });
+
+        pc.oniceconnectionstatechange = () => {
+            dbg('ICE state: ' + pc.iceConnectionState);
+            if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                setStatus('connected');
+            } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+                setStatus('disconnected');
+            }
+        };
+
+        pc.onicegatheringstatechange = () => dbg('ICE gathering: ' + pc.iceGatheringState);
+        pc.onsignalingstatechange   = () => dbg('Signaling: '     + pc.signalingState);
+
+        pc.ontrack = (e) => {
+            dbg('ontrack fired — streams: ' + e.streams.length);
+            document.getElementById('remoteVideo').srcObject = e.streams[0];
+        };
+
+        // Wait for ICE gathering to finish so all candidates are in the SDP
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+        await new Promise(resolve => {
+            if (pc.iceGatheringState === 'complete') { resolve(); return; }
+            pc.addEventListener('icegatheringstatechange', function h() {
+                if (pc.iceGatheringState === 'complete') {
+                    pc.removeEventListener('icegatheringstatechange', h);
+                    resolve();
+                }
+            });
+        });
+
+        dbg('Sending offer to ' + DEVICE_ID);
+        answerTimeout = setTimeout(() => {
+            dbg('No answer from device — is it online?');
+            setStatus('disconnected');
+            document.getElementById('conn-label').textContent = 'Device did not respond';
+        }, 10000);
+        socket.emit('signal', {
+            sdp: pc.localDescription.sdp,
+            type: pc.localDescription.type,
+            target_id: DEVICE_ID
+        });
+    }
+
+    socket.on('signal', async (data) => {
+        dbg('Got signal back: type=' + data.type + ' sdp=' + !!data.sdp);
+        clearTimeout(answerTimeout);
+        if (data.sdp && pc) {
+            await pc.setRemoteDescription(new RTCSessionDescription(data));
+            dbg('Remote description set');
+        }
+    });
+
+    socket.on('signal_error', (data) => {
+        dbg('Error: ' + data.message);
+        setStatus('disconnected');
+        document.getElementById('conn-label').textContent = data.message;
+    });
+
+    const video = document.getElementById('remoteVideo');
+
+    function send(obj) {
+        if (dc && dc.readyState === 'open') dc.send(JSON.stringify(obj));
+    }
+
+    function pos(e) {
+        const r = video.getBoundingClientRect();
+        return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+    }
+
+    video.addEventListener('mousedown',   (e) => { e.preventDefault(); send({ type: 'mousedown', button: e.button, ...pos(e) }); });
+    video.addEventListener('mouseup',     (e) => { send({ type: 'mouseup',   button: e.button, ...pos(e) }); });
+    video.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    video.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        send({ type: 'scroll', deltaX: e.deltaX, deltaY: e.deltaY, ...pos(e) });
+    }, { passive: false });
+
+    let lastMove = 0;
+    video.addEventListener('mousemove', (e) => {
+        const now = Date.now();
+        if (now - lastMove < 16) return;
+        lastMove = now;
+        send({ type: 'mousemove', ...pos(e) });
+    });
+
+    window.addEventListener('keydown', (e) => {
+        e.preventDefault();
+        send({ type: 'keydown', code: e.code });
+    });
+    window.addEventListener('keyup', (e) => {
+        send({ type: 'keyup', code: e.code });
+    });
+
+    startSession();
+</script>
+{% endblock %}

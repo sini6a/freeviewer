@@ -1,0 +1,307 @@
+{% extends "base.html" %}
+{% block title %}Dashboard | FreeViewer{% endblock %}
+
+{% block content %}
+<div class="fv-page-header">
+    <h2>Dashboard</h2>
+    <p>Overview of your connected devices</p>
+</div>
+
+<!-- Stats -->
+<div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+        <div class="fv-stat">
+            <div class="fv-stat-icon" style="background:#eff6ff;color:#3b82f6;">
+                <i class="bi bi-pc-display"></i>
+            </div>
+            <div>
+                <div class="fv-stat-value" id="stat-total">{{ stats.total }}</div>
+                <div class="fv-stat-label">Total</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="fv-stat">
+            <div class="fv-stat-icon" style="background:#dcfce7;color:#16a34a;">
+                <i class="bi bi-wifi"></i>
+            </div>
+            <div>
+                <div class="fv-stat-value" id="stat-online">{{ stats.online }}</div>
+                <div class="fv-stat-label">Online</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="fv-stat">
+            <div class="fv-stat-icon" style="background:#dbeafe;color:#3b82f6;">
+                <i class="bi bi-check2-circle"></i>
+            </div>
+            <div>
+                <div class="fv-stat-value" id="stat-paired">{{ stats.paired }}</div>
+                <div class="fv-stat-label">Paired</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-6 col-md-3">
+        <div class="fv-stat">
+            <div class="fv-stat-icon" style="background:#fef9c3;color:#ca8a04;">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+            <div>
+                <div class="fv-stat-value" id="stat-pending">{{ stats.pending }}</div>
+                <div class="fv-stat-label">Pending codes</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Devices -->
+<div class="fv-card mb-4">
+    <div class="fv-card-header">
+        <h5>Devices</h5>
+        <div class="d-flex align-items-center gap-2">
+            <div style="position:relative;">
+                <i class="bi bi-search" style="position:absolute;left:.65rem;top:50%;transform:translateY(-50%);color:#94a3b8;font-size:.8rem;pointer-events:none;"></i>
+                <input id="device-search" type="search" placeholder="Search devices…"
+                       style="padding:.38rem .75rem .38rem 2rem;border:1px solid #e2e8f0;border-radius:8px;
+                              font-size:.82rem;font-family:inherit;outline:none;width:200px;
+                              transition:border-color .15s;"
+                       onfocus="this.style.borderColor='#3b82f6'"
+                       onblur="this.style.borderColor='#e2e8f0'">
+            </div>
+            <a href="{{ url_for('pair') }}" class="btn-primary-fv">
+                <i class="bi bi-plus-lg"></i> Pair new device
+            </a>
+        </div>
+    </div>
+
+    {% if devices %}
+    <div class="table-responsive">
+        <table class="table fv-table">
+            <thead>
+                <tr>
+                    <th>Device</th>
+                    <th>Status</th>
+                    <th>Pairing</th>
+                    <th>Last seen</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for device in devices %}
+                <tr id="device-row-{{ device['device_code'] }}">
+                    <td>
+                        <div class="device-name">{{ device["display_name"] }}</div>
+                        <div class="device-code">{{ device["device_code"] }}</div>
+                    </td>
+                    <td class="dev-status">
+                        {% if device["status"] == "online" %}
+                        <span class="fv-badge online">
+                            <span class="fv-badge-dot" style="background:#16a34a;"></span>Online
+                        </span>
+                        {% else %}
+                        <span class="fv-badge offline">
+                            <span class="fv-badge-dot" style="background:#94a3b8;"></span>Offline
+                        </span>
+                        {% endif %}
+                    </td>
+                    <td class="dev-pairing">
+                        {% if device["pairing_state"] == "paired" %}
+                        <span class="fv-badge paired">Paired</span>
+                        {% elif device["pairing_state"] == "blocked" %}
+                        <span class="fv-badge blocked">Blocked</span>
+                        {% else %}
+                        <span class="fv-badge pending">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td class="dev-lastseen" style="color:#94a3b8;font-size:.8rem;">
+                        {{ device["last_seen_at"] | dt }}
+                    </td>
+                    <td class="text-end dev-actions">
+                        <div class="d-flex gap-1 justify-content-end align-items-center">
+                            {% if device["status"] == "online" and device["pairing_state"] == "paired" %}
+                            <a href="{{ url_for('connect', device_id=device['device_code']) }}"
+                               class="btn-connect-fv btn-connect">
+                                <i class="bi bi-arrow-right-circle"></i> Connect
+                            </a>
+                            {% endif %}
+
+                            {% if device["pairing_state"] == "blocked" %}
+                            <form method="post"
+                                  action="{{ url_for('unblock_device', device_id=device['device_code']) }}"
+                                  class="m-0">
+                                <button type="submit" class="btn-ghost warning">
+                                    <i class="bi bi-unlock"></i> Unblock
+                                </button>
+                            </form>
+                            {% endif %}
+
+                            <button class="btn-icon"
+                                    data-bs-toggle="modal"
+                                    data-bs-target="#renameModal-{{ device['device_code'] }}"
+                                    title="Rename">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+
+                            <form method="post"
+                                  action="{{ url_for('delete_device', device_id=device['device_code']) }}"
+                                  onsubmit="return confirm('Delete {{ device['display_name'] }}? This cannot be undone.')"
+                                  class="m-0">
+                                <button type="submit" class="btn-icon danger" title="Delete">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </form>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <i class="bi bi-pc-display"></i>
+        <p>No devices yet. Pair your first device to get started.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Rename modals -->
+{% for device in devices %}
+<div class="modal fade" id="renameModal-{{ device['device_code'] }}" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <form method="post" action="{{ url_for('rename_device', device_id=device['device_code']) }}">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Rename Device</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label">Display name</label>
+                    <input type="text" name="display_name" class="form-control"
+                           value="{{ device['display_name'] }}" required>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn-primary-fv">Save</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endfor %}
+
+<!-- Recent Pairing Requests -->
+<div class="fv-card">
+    <div class="fv-card-header">
+        <h5>Recent Pairing Requests</h5>
+        <a href="{{ url_for('pair') }}" class="btn-ghost">
+            <i class="bi bi-plus-circle"></i> Generate code
+        </a>
+    </div>
+
+    {% if pairing_requests %}
+    <div class="table-responsive">
+        <table class="table fv-table">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Status</th>
+                    <th>Expires</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in pairing_requests %}
+                <tr>
+                    <td style="font-family:monospace;font-size:1.05rem;font-weight:700;letter-spacing:.12em;">
+                        {{ req["code"] }}
+                    </td>
+                    <td>
+                        {% if req["status"] == "completed" %}
+                        <span class="fv-badge completed">Completed</span>
+                        {% elif req["status"] == "expired" %}
+                        <span class="fv-badge expired">Expired</span>
+                        {% else %}
+                        <span class="fv-badge pending">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td style="color:#94a3b8;font-size:.8rem;">{{ req["expires_at"] | dt }}</td>
+                    <td style="color:#94a3b8;font-size:.8rem;">{{ req["created_at"] | dt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state" style="padding:2rem;">
+        <p>No pairing requests yet.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const socket = io();
+
+socket.on('device_update', (d) => {
+    const row = document.getElementById('device-row-' + d.device_code);
+    if (!row) { location.reload(); return; }
+
+    // Status badge
+    row.querySelector('.dev-status').innerHTML = d.status === 'online'
+        ? '<span class="fv-badge online"><span class="fv-badge-dot" style="background:#16a34a;"></span>Online</span>'
+        : '<span class="fv-badge offline"><span class="fv-badge-dot" style="background:#94a3b8;"></span>Offline</span>';
+
+    // Pairing badge
+    const pairingMap = {
+        paired:  '<span class="fv-badge paired">Paired</span>',
+        blocked: '<span class="fv-badge blocked">Blocked</span>',
+    };
+    row.querySelector('.dev-pairing').innerHTML =
+        pairingMap[d.pairing_state] ?? '<span class="fv-badge pending">Pending</span>';
+
+    // Last seen
+    if (d.last_seen_at) row.querySelector('.dev-lastseen').textContent = d.last_seen_at;
+
+    // Connect button
+    const actionsDiv = row.querySelector('.dev-actions div');
+    const existing = actionsDiv.querySelector('.btn-connect');
+    if (d.status === 'online' && d.pairing_state === 'paired') {
+        if (!existing) {
+            const a = document.createElement('a');
+            a.href = '/connect/' + d.device_code;
+            a.className = 'btn-connect-fv btn-connect';
+            a.innerHTML = '<i class="bi bi-arrow-right-circle"></i> Connect';
+            actionsDiv.prepend(a);
+        }
+    } else {
+        existing?.remove();
+    }
+
+    // Recalculate stat counters from DOM
+    let total = 0, online = 0, paired = 0, pending = 0;
+    document.querySelectorAll('tbody tr[id^="device-row-"]').forEach(r => {
+        total++;
+        if (r.querySelector('.dev-status .fv-badge')?.textContent.trim() === 'Online') online++;
+        const p = r.querySelector('.dev-pairing .fv-badge')?.textContent.trim();
+        if (p === 'Paired') paired++;
+        else if (p === 'Pending') pending++;
+    });
+    document.getElementById('stat-total').textContent  = total;
+    document.getElementById('stat-online').textContent = online;
+    document.getElementById('stat-paired').textContent = paired;
+    document.getElementById('stat-pending').textContent = pending;
+});
+
+document.getElementById('device-search').addEventListener('input', function () {
+    const q = this.value.trim().toLowerCase();
+    document.querySelectorAll('tbody tr[id^="device-row-"]').forEach(row => {
+        const name = row.querySelector('.device-name')?.textContent.toLowerCase() ?? '';
+        const code = row.querySelector('.device-code')?.textContent.toLowerCase() ?? '';
+        row.style.display = (!q || name.includes(q) || code.includes(q)) ? '' : 'none';
+    });
+});
+</script>
+{% endblock %}

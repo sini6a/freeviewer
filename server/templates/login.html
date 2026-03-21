@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Sign In | FreeViewer{% endblock %}
+
+{% block content %}
+<div class="fv-auth-card">
+    <div class="fv-auth-logo">
+        <div class="logo-mark"><i class="bi bi-display"></i></div>
+        <h1>FreeViewer</h1>
+        <p>Remote access management</p>
+    </div>
+
+    {% if not has_users %}
+    <div class="alert alert-info mb-4">
+        No account yet.
+        <a href="{{ url_for('register') }}" class="fw-semibold" style="color:inherit;">
+            Create the first admin account →
+        </a>
+    </div>
+    {% endif %}
+
+    <form method="post">
+        <div class="mb-3">
+            <label class="form-label">Email address</label>
+            <input type="email" name="email" class="form-control"
+                   placeholder="admin@example.com" required autofocus>
+        </div>
+        <div class="mb-4">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-control"
+                   placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn-primary-fv w-100 justify-content-center"
+                style="padding:.65rem; font-size:.9rem;">
+            <i class="bi bi-arrow-right-circle"></i> Sign in
+        </button>
+    </form>
+</div>
+{% endblock %}

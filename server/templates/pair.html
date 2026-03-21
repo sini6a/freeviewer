@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Pair Device | FreeViewer{% endblock %}
+
+{% block content %}
+<div class="fv-page-header d-flex align-items-start justify-content-between flex-wrap gap-2">
+    <div>
+        <h2>Pair Device</h2>
+        <p>Generate a one-time code and enter it on the remote machine</p>
+    </div>
+    <a href="{{ url_for('dashboard') }}" class="btn-ghost">
+        <i class="bi bi-arrow-left"></i> Dashboard
+    </a>
+</div>
+
+<div class="row g-4">
+
+    <!-- Generate Code -->
+    <div class="col-md-5">
+        <div class="fv-card">
+            <div class="fv-card-header">
+                <h5>Generate Pairing Code</h5>
+            </div>
+            <div class="fv-card-body">
+                <p style="color:#64748b;font-size:.84rem;margin:0 0 1.25rem;">
+                    Codes expire after <strong>{{ expiry_minutes }} minutes</strong>.
+                    Enter the code into
+                    <code style="background:#f1f5f9;padding:.1rem .4rem;border-radius:5px;font-size:.82rem;">agent.py</code>
+                    on your remote machine.
+                </p>
+
+                <form method="post">
+                    <button type="submit" class="btn-primary-fv w-100 justify-content-center"
+                            style="padding:.6rem;font-size:.875rem;">
+                        <i class="bi bi-plus-circle"></i> Generate new code
+                    </button>
+                </form>
+
+                {% if latest_request %}
+                <div class="pairing-code-box {{ 'active' if latest_request['status'] == 'pending' else '' }}">
+                    <div class="code-label">
+                        {% if latest_request["status"] == "pending" %}Active code{% else %}Latest code{% endif %}
+                    </div>
+                    <div class="pairing-code-value">{{ latest_request["code"] }}</div>
+                    <div style="margin-top:.85rem;">
+                        {% if latest_request["status"] == "completed" %}
+                        <span class="fv-badge completed">Completed</span>
+                        {% elif latest_request["status"] == "expired" %}
+                        <span class="fv-badge expired">Expired</span>
+                        {% else %}
+                        <span class="fv-badge pending">
+                            Pending — expires {{ latest_request["expires_at"] | dt }}
+                        </span>
+                        {% endif %}
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- History -->
+    <div class="col-md-7">
+        <div class="fv-card">
+            <div class="fv-card-header">
+                <h5>Pairing History</h5>
+            </div>
+
+            {% if pending_requests %}
+            <div class="table-responsive">
+                <table class="table fv-table">
+                    <thead>
+                        <tr>
+                            <th>Code</th>
+                            <th>Status</th>
+                            <th>Expires</th>
+                            <th>Created</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for req in pending_requests %}
+                        <tr>
+                            <td style="font-family:monospace;font-weight:700;letter-spacing:.1em;">
+                                {{ req["code"] }}
+                            </td>
+                            <td>
+                                {% if req["status"] == "completed" %}
+                                <span class="fv-badge completed">Completed</span>
+                                {% elif req["status"] == "expired" %}
+                                <span class="fv-badge expired">Expired</span>
+                                {% else %}
+                                <span class="fv-badge pending">Pending</span>
+                                {% endif %}
+                            </td>
+                            <td style="color:#94a3b8;font-size:.8rem;">{{ req["expires_at"] | dt }}</td>
+                            <td style="color:#94a3b8;font-size:.8rem;">{{ req["created_at"] | dt }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <i class="bi bi-key"></i>
+                <p>No pairing requests yet.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+{% endblock %}

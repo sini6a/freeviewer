@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Remote Panel</title>
+    <style>
+        body { font-family: sans-serif; background: #f0f2f5; margin: 20px; }
+        .hidden { display: none; }
+        .card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); margin-bottom: 10px; }
+        #remoteVideo { width: 100%; max-width: 1280px; background: #000; cursor: crosshair; }
+        .device-item { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding: 10px 0; }
+        .btn { padding: 8px 15px; cursor: pointer; border: none; border-radius: 4px; background: #007bff; color: white; }
+        .btn-pair { background: #28a745; }
+    </style>
+</head>
+<body>
+
+    <!-- 1. LOGIN VIEW -->
+    <div id="login-view" class="card">
+        <h2>Login</h2>
+        <input type="text" id="username" placeholder="Username"><br><br>
+        <input type="password" id="password" placeholder="Password"><br><br>
+        <button class="btn" onclick="showDashboard()">Login</button>
+    </div>
+
+    <!-- 2. DASHBOARD VIEW -->
+    <div id="dashboard-view" class="card hidden">
+        <h2>My Remote Computers</h2>
+        <div id="device-list">Loading devices...</div>
+    </div>
+
+    <!-- 3. REMOTE VIEW -->
+    <div id="remote-view" class="hidden">
+        <button class="btn" onclick="showDashboard()" style="margin-bottom: 10px;">← Back to List</button>
+        <div class="card">
+            <video id="remoteVideo" autoplay playsinline></video>
+        </div>
+    </div>
+
+    <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
+    <script>
+        const socket = io();
+        let pc;
+        let dc;
+        let currentTargetId = null;
+
+        function showDashboard() {
+            document.getElementById('login-view').classList.add('hidden');
+            document.getElementById('remote-view').classList.add('hidden');
+            document.getElementById('dashboard-view').classList.remove('hidden');
+        }
+
+        socket.on('update_device_list', (devices) => {
+            const list = document.getElementById('device-list');
+            list.innerHTML = '';
+            devices.forEach(dev => {
+                const div = document.createElement('div');
+                div.className = 'device-item';
+                div.innerHTML = `
+                    <strong>${dev.name}</strong>
+                    <div>
+                        ${dev.paired ? 
+                            `<button class="btn" onclick="startSession('${dev.id}')">Connect</button>` : 
+                            `<input type="text" id="pin-${dev.id}" placeholder="PIN" style="width:60px">
+                             <button class="btn btn-pair" onclick="pairDevice('${dev.id}')">Pair</button>`
+                        }
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+        });
+
+        async function pairDevice(id) {
+            const pin = document.getElementById(`pin-${id}`).value;
+            socket.emit('attempt_pair', { id, pin });
+        }
+
+        async function startSession(targetId) {
+            currentTargetId = targetId;
+            document.getElementById('dashboard-view').classList.add('hidden');
+            document.getElementById('remote-view').classList.remove('hidden');
+
+            pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+            dc = pc.createDataChannel("control");
+
+            pc.addTransceiver('video', { direction: 'recvonly' });
+
+            const offer = await pc.createOffer();
+            await pc.setLocalDescription(offer);
+            socket.emit('signal', { sdp: pc.localDescription.sdp, type: pc.localDescription.type, target_id: targetId });
+
+            pc.ontrack = (event) => {
+                document.getElementById('remoteVideo').srcObject = event.streams[0];
+            };
+
+            setupInputs();
+        }
+
+        function setupInputs() {
+            const video = document.getElementById('remoteVideo');
+            video.onclick = (e) => {
+                if (dc && dc.readyState === "open") {
+                    const rect = video.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) / rect.width;
+                    const y = (e.clientY - rect.top) / rect.height;
+                    dc.send(JSON.stringify({ type: 'click', x, y }));
+                }
+            };
+            window.onkeydown = (e) => {
+                if (dc && dc.readyState === "open" && currentTargetId) {
+                    dc.send(JSON.stringify({ type: 'keypress', key: e.key }));
+                }
+            };
+        }
+
+        socket.on('signal', async (data) => {
+            if (data.sdp && pc) {
+                await pc.setRemoteDescription(new RTCSessionDescription(data));
+                if (data.type === 'offer') {
+                    const answer = await pc.createAnswer();
+                    await pc.setLocalDescription(answer);
+                    socket.emit('signal', { sdp: pc.localDescription.sdp, type: pc.localDescription.type, target_id: data.sender_id });
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Settings | FreeViewer{% endblock %}
+
+{% block content %}
+<div class="fv-page-header">
+    <h2>Settings</h2>
+    <p>Server-wide configuration</p>
+</div>
+
+<form method="post">
+<div class="row g-4">
+
+    <!-- TURN / ICE config -->
+    <div class="col-lg-7">
+        <div class="fv-card">
+            <div class="fv-card-header">
+                <h5>WebRTC / TURN Server</h5>
+                {% if turn_url %}
+                <span class="fv-badge online"><span class="fv-badge-dot" style="background:#16a34a;"></span>Configured</span>
+                {% else %}
+                <span class="fv-badge offline"><span class="fv-badge-dot" style="background:#94a3b8;"></span>STUN only</span>
+                {% endif %}
+            </div>
+            <div class="fv-card-body">
+                <p style="font-size:.84rem;color:#64748b;margin:0 0 1.25rem;">
+                    A TURN server relays the video stream when a direct peer-to-peer connection
+                    cannot be established (strict NAT, corporate networks, mobile carriers).
+                    Leave blank to use STUN only, which works for most home and office networks.
+                </p>
+
+                <div class="mb-3">
+                    <label class="form-label">TURN server URL</label>
+                    <input type="text" name="turn_url" class="form-control"
+                           value="{{ turn_url }}"
+                           placeholder="turn:your-server.com:3478  or  turns:your-server.com:5349">
+                    <div style="font-size:.75rem;color:#94a3b8;margin-top:.35rem;">
+                        Use <code style="background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">turns:</code>
+                        prefix for TLS (recommended). Leave blank to disable TURN.
+                    </div>
+                </div>
+
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <input type="text" name="turn_username" class="form-control"
+                           value="{{ turn_username }}" placeholder="Leave blank if not required">
+                </div>
+
+                <div class="mb-4">
+                    <label class="form-label">Credential / Password</label>
+                    <input type="password" name="turn_credential" class="form-control"
+                           value="{{ turn_credential }}" placeholder="Leave blank if not required">
+                </div>
+
+                <div class="d-flex gap-2 align-items-center">
+                    <button type="submit" class="btn-primary-fv">
+                        <i class="bi bi-check2"></i> Save settings
+                    </button>
+                    {% if turn_url %}
+                    <button type="button" class="btn-ghost"
+                            onclick="document.querySelector('[name=turn_url]').value='';
+                                     document.querySelector('[name=turn_username]').value='';
+                                     document.querySelector('[name=turn_credential]').value='';">
+                        <i class="bi bi-x"></i> Clear TURN
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info panel -->
+    <div class="col-lg-5">
+        <div class="fv-card">
+            <div class="fv-card-header"><h5>How it works</h5></div>
+            <div class="fv-card-body" style="font-size:.84rem;color:#64748b;line-height:1.7;">
+                <p><strong style="color:#334155;">STUN only</strong> — free, works for ~80% of
+                networks. Both peers discover their public IP and attempt a direct connection.</p>
+                <p><strong style="color:#334155;">STUN + TURN</strong> — the TURN server relays
+                traffic when a direct connection fails. Required for strict corporate firewalls,
+                mobile carriers, and carrier-grade NAT.</p>
+                <p style="margin:0;"><strong style="color:#334155;">This config is used by both
+                the browser and all connected agents</strong> — you only need to set it once here.</p>
+            </div>
+        </div>
+
+        <div class="fv-card mt-4">
+            <div class="fv-card-header"><h5>Free TURN providers</h5></div>
+            <div class="fv-card-body" style="font-size:.84rem;">
+                <div style="display:flex;flex-direction:column;gap:.6rem;color:#64748b;">
+                    <div>
+                        <strong style="color:#334155;">Metered</strong><br>
+                        Free tier · 50 GB/mo<br>
+                        <code style="font-size:.78rem;background:#f1f5f9;padding:.1rem .35rem;border-radius:4px;">
+                            turn:global.relay.metered.ca:80
+                        </code>
+                    </div>
+                    <div>
+                        <strong style="color:#334155;">Self-hosted (coturn)</strong><br>
+                        Free · full control<br>
+                        <a href="https://github.com/coturn/coturn"
+                           target="_blank" rel="noopener"
+                           style="color:#3b82f6;text-decoration:none;">
+                            github.com/coturn/coturn
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+</form>
+{% endblock %}

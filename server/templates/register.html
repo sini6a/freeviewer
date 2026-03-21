@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Create Admin | FreeViewer{% endblock %}
+
+{% block content %}
+<div class="fv-auth-card">
+    <div class="fv-auth-logo">
+        <div class="logo-mark"><i class="bi bi-display"></i></div>
+        <h1>FreeViewer</h1>
+        <p>First-time setup</p>
+    </div>
+
+    <p style="font-size:.84rem;color:#64748b;margin:-1rem 0 1.5rem;">
+        Create the admin account. This can only be done once.
+    </p>
+
+    <form method="post">
+        <div class="mb-3">
+            <label class="form-label">Email address</label>
+            <input type="email" name="email" class="form-control"
+                   placeholder="admin@example.com" required autofocus>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">Password</label>
+            <input type="password" name="password" class="form-control"
+                   placeholder="••••••••" required>
+        </div>
+        <div class="mb-4">
+            <label class="form-label">Confirm password</label>
+            <input type="password" name="confirm_password" class="form-control"
+                   placeholder="••••••••" required>
+        </div>
+        <button type="submit" class="btn-primary-fv w-100 justify-content-center"
+                style="padding:.65rem; font-size:.9rem;">
+            <i class="bi bi-person-plus"></i> Create account
+        </button>
+    </form>
+
+    <div class="text-center mt-3">
+        <a href="{{ url_for('login') }}" style="color:#94a3b8;font-size:.82rem;text-decoration:none;">
+            ← Back to sign in
+        </a>
+    </div>
+</div>
+{% endblock %}
