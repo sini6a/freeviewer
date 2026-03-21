@@ -68,6 +68,29 @@
         </div>
     </div>
 
+    <!-- Debug panel toggle -->
+    <div class="col-lg-7">
+        <div class="fv-card">
+            <div class="fv-card-header">
+                <h5>Developer Options</h5>
+            </div>
+            <div class="fv-card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <div style="font-size:.9rem;font-weight:600;color:#0f172a;">Show debug panel</div>
+                        <div style="font-size:.8rem;color:#64748b;margin-top:.2rem;">
+                            Displays WebRTC connection logs on the remote viewer page.
+                        </div>
+                    </div>
+                    <label class="fv-toggle">
+                        <input type="checkbox" id="debug-toggle">
+                        <span class="fv-toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Info panel -->
     <div class="col-lg-5">
         <div class="fv-card">
@@ -110,4 +133,31 @@
 
 </div>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .fv-toggle { position:relative; display:inline-block; width:44px; height:24px; flex-shrink:0; }
+    .fv-toggle input { opacity:0; width:0; height:0; }
+    .fv-toggle-slider {
+        position:absolute; cursor:pointer; inset:0;
+        background:#cbd5e1; border-radius:24px;
+        transition:background .2s;
+    }
+    .fv-toggle-slider::before {
+        content:''; position:absolute;
+        width:18px; height:18px; left:3px; bottom:3px;
+        background:#fff; border-radius:50%;
+        transition:transform .2s;
+    }
+    .fv-toggle input:checked + .fv-toggle-slider { background:#3b82f6; }
+    .fv-toggle input:checked + .fv-toggle-slider::before { transform:translateX(20px); }
+</style>
+<script>
+    const toggle = document.getElementById('debug-toggle');
+    toggle.checked = localStorage.getItem('fv_debug') === '1';
+    toggle.addEventListener('change', () => {
+        localStorage.setItem('fv_debug', toggle.checked ? '1' : '0');
+    });
+</script>
 {% endblock %}

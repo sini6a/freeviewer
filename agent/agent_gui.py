@@ -224,7 +224,10 @@ def handle_input(msg: dict):
 class ScreenShareTrack(VideoStreamTrack):
     """Captures the screen in a background thread so recv() never blocks asyncio."""
 
-    def __init__(self, max_width: int, max_height: int, framerate: int):
+    STATS_INTERVAL = 10.0  # seconds between log entries
+
+    def __init__(self, max_width: int, max_height: int, framerate: int,
+                 log_cb=None):
         super().__init__()
         self._max_width  = max_width
         self._max_height = max_height
@@ -232,6 +235,10 @@ class ScreenShareTrack(VideoStreamTrack):
         self._latest     = None
         self._lock       = threading.Lock()
         self._running    = True
+        self._log        = log_cb or (lambda msg: None)
+        # recv() stats
+        self._recv_count   = 0
+        self._recv_wait_ms = 0.0
         threading.Thread(target=self._capture_loop, daemon=True).start()
 
     def stop(self):
@@ -241,9 +248,16 @@ class ScreenShareTrack(VideoStreamTrack):
     def _capture_loop(self):
         sct = mss()
         monitor = sct.monitors[1]
-        interval = 1.0 / self._framerate
+        interval  = 1.0 / self._framerate
+        # stats accumulators
+        cap_count  = 0
+        cap_ms     = 0.0
+        over_count = 0          # frames where capture exceeded interval
+        stats_t    = time.perf_counter()
+        out_w = out_h = 0
+
         while self._running:
-            t0 = time.perf_counter()
+            t0  = time.perf_counter()
             img = np.array(sct.grab(monitor))
             img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
             h, w = img.shape[:2]
@@ -251,24 +265,49 @@ class ScreenShareTrack(VideoStreamTrack):
             if scale < 1.0:
                 img = cv2.resize(img, (int(w * scale), int(h * scale)),
                                  interpolation=cv2.INTER_LINEAR)
-            mx, my = pyautogui.position()
-            cx, cy = int(mx * scale), int(my * scale)
-            cv2.circle(img, (cx, cy), 8, (0, 0, 255), -1)
+            # Cursor is drawn as a browser overlay — not burned into the frame
             with self._lock:
                 self._latest = img
-            elapsed = time.perf_counter() - t0
-            # Always sleep at least 5 ms so the VP8 encoder and asyncio
-            # event loop get CPU time even when capture is slow
+
+            elapsed    = time.perf_counter() - t0
+            cap_ms    += elapsed * 1000
+            cap_count += 1
+            out_h, out_w = img.shape[:2]
+            if elapsed > interval:
+                over_count += 1
+
+            # Periodic stats log
+            now = time.perf_counter()
+            if now - stats_t >= self.STATS_INTERVAL and cap_count:
+                actual_fps = cap_count / (now - stats_t)
+                avg_ms     = cap_ms / cap_count
+                recv_avg   = (self._recv_wait_ms / self._recv_count
+                              if self._recv_count else 0)
+                self._log(
+                    f"[capture] {actual_fps:.1f} fps  "
+                    f"grab+encode {avg_ms:.0f} ms/frame  "
+                    f"out {out_w}×{out_h}  "
+                    f"overruns {over_count}  "
+                    f"recv wait {recv_avg:.0f} ms"
+                )
+                cap_count = cap_ms = over_count = 0
+                self._recv_count = self._recv_wait_ms = 0
+                stats_t = now
+
             time.sleep(max(interval - elapsed, 0.005))
 
     async def recv(self):
         pts, time_base = await self.next_timestamp()
+        t0 = time.perf_counter()
         while True:
             with self._lock:
                 img = self._latest
             if img is not None:
                 break
-            await asyncio.sleep(0.01)
+            await asyncio.sleep(0.005)
+        wait_ms = (time.perf_counter() - t0) * 1000
+        self._recv_count    += 1
+        self._recv_wait_ms  += wait_ms
         frame = VideoFrame.from_ndarray(img, format="bgr24")
         frame.pts, frame.time_base = pts, time_base
         return frame
@@ -831,6 +870,7 @@ class AgentApp:
                     max_width=max_w,
                     max_height=max_h,
                     framerate=self._settings["target_fps"],
+                    log_cb=self.alog,
                 )
                 self._track = track
                 pc.addTrack(track)
@@ -843,10 +883,13 @@ class AgentApp:
 
                 @pc.on("datachannel")
                 def on_dc(channel):
+                    _loop = asyncio.get_event_loop()
+
                     @channel.on("message")
                     def on_msg(message):
                         try:
-                            handle_input(json.loads(message))
+                            # Run in thread so pyautogui calls don't block asyncio
+                            _loop.run_in_executor(None, handle_input, json.loads(message))
                         except Exception:
                             pass
 

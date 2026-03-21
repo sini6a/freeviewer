@@ -1,10 +1,18 @@
 import atexit
+import logging
 import os
 import secrets
 import sqlite3
 from functools import wraps
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+log = logging.getLogger("freeviewer")
 
 from dotenv import load_dotenv
 from flask import (
@@ -410,6 +418,12 @@ def handle_register_agent(data):
 
     now = utc_now()
 
+    log.info("register_agent: id=%s name=%s token=%s code=%s sid=%s",
+             device_id, device_name,
+             "yes" if device_token else "no",
+             "yes" if pairing_code else "no",
+             request.sid[:8])
+
     # --- Unattended reconnect: validate stored token ---
     if device_token:
         device = query_one(
@@ -437,6 +451,7 @@ def handle_register_agent(data):
             (now.isoformat(), device_id),
         )
         agent_sids[device_id] = request.sid
+        log.info("agent reconnected: %s (%s) sid=%s", device_id, device_name, request.sid[:8])
         socketio.emit('device_update', {'device_code': device_id, 'status': 'online',
                                         'pairing_state': 'paired', 'last_seen_at': now.isoformat()})
         emit('registration_status', {'success': True, 'paired': True, 'message': 'Reconnected'})
@@ -499,6 +514,7 @@ def handle_register_agent(data):
 
     execute("UPDATE pairing_requests SET status = 'completed' WHERE id = ?", (pr['id'],))
     agent_sids[device_id] = request.sid
+    log.info("agent paired: %s (%s) sid=%s", device_id, device_name, request.sid[:8])
     socketio.emit('device_update', {'device_code': device_id, 'status': 'online',
                                     'pairing_state': 'paired', 'last_seen_at': now.isoformat()})
     emit('registration_status', {'success': True, 'paired': True, 'message': 'Device paired successfully', 'device_token': new_token})
@@ -507,26 +523,31 @@ def handle_register_agent(data):
 @socketio.on('signal')
 def handle_signal(data):
     target_id = data.get('target_id')
+    sig_type  = data.get('type', '?')
     if not target_id:
         return
     # Browser → Agent: target_id is a device_code; include ICE config
     if target_id in agent_sids:
+        log.info("signal %s: browser %s → agent %s", sig_type, request.sid[:8], target_id)
         emit('signal', {**data, 'sender_id': request.sid,
                         'ice_servers': get_ice_servers()}, to=agent_sids[target_id])
     elif data.get('type') == 'offer':
-        # Browser sent an offer but device is not connected — tell the browser
+        log.warning("signal offer: agent %s not in agent_sids (connected agents: %s)",
+                    target_id, list(agent_sids.keys()))
         emit('signal_error', {'message': 'Device is not connected to the server.'})
     else:
-        # Agent → Browser: target_id is the browser's socket sid
+        log.info("signal %s: agent → browser %s", sig_type, target_id[:8])
         emit('signal', data, to=target_id)
 
 
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid
+    log.info("disconnect: sid=%s (agents online: %d)", sid[:8], len(agent_sids))
     for device_code, stored_sid in list(agent_sids.items()):
         if stored_sid == sid:
             del agent_sids[device_code]
+            log.info("agent offline: %s", device_code)
             execute(
                 "UPDATE devices SET status = 'offline' WHERE device_code = ?",
                 (device_code,),

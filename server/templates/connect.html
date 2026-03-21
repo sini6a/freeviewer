@@ -33,7 +33,7 @@
         Left / right / middle click &middot; Scroll &middot; Full keyboard including Ctrl, Alt, Shift
     </p>
 
-    <pre id="fv-debug" style="font-size:.72rem;color:#94a3b8;background:#0f172a;border:1px solid #334155;
+    <pre id="fv-debug" style="display:none;font-size:.72rem;color:#94a3b8;background:#0f172a;border:1px solid #334155;
          border-radius:6px;padding:.6rem 1rem;max-height:120px;overflow-y:auto;margin-top:.5rem;
          white-space:pre-wrap;word-break:break-all;"></pre>
 
@@ -44,8 +44,12 @@
 <script>
     const DEVICE_ID = "{{ device['device_code'] }}";
     const socket = io();
-    let pc, dc, answerTimeout;
+    let pc, dc, answerTimeout, reconnectTimer;
 
+    // ── Cursor overlay ──────────────────────────────────────────────────────────
+    const video = document.getElementById('remoteVideo');
+
+    // ── Status ──────────────────────────────────────────────────────────────────
     function setStatus(state) {
         const badge = document.getElementById('conn-status');
         const dot   = document.getElementById('conn-dot');
@@ -65,13 +69,29 @@
         }
     }
 
+    const debugEl = document.getElementById('fv-debug');
+    if (localStorage.getItem('fv_debug') === '1') debugEl.style.display = '';
+
     function dbg(msg) {
         console.log('[FV]', msg);
-        const el = document.getElementById('fv-debug');
-        if (el) { el.textContent += msg + '\n'; el.scrollTop = el.scrollHeight; }
+        if (debugEl.style.display !== 'none') {
+            debugEl.textContent += msg + '\n';
+            debugEl.scrollTop = debugEl.scrollHeight;
+        }
+    }
+
+    // ── WebRTC session ──────────────────────────────────────────────────────────
+    function scheduleReconnect() {
+        if (reconnectTimer) return;
+        dbg('Will reconnect in 3s…');
+        document.getElementById('conn-label').textContent = 'Reconnecting…';
+        reconnectTimer = setTimeout(() => { reconnectTimer = null; startSession(); }, 3000);
     }
 
     async function startSession() {
+        clearTimeout(answerTimeout);
+        if (pc) { try { pc.close(); } catch (_) {} pc = null; dc = null; }
+
         let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
         try {
             const r = await fetch('/api/ice-config');
@@ -88,8 +108,12 @@
             dbg('ICE state: ' + pc.iceConnectionState);
             if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
                 setStatus('connected');
-            } else if (pc.iceConnectionState === 'disconnected' || pc.iceConnectionState === 'failed') {
+            } else if (pc.iceConnectionState === 'failed') {
                 setStatus('disconnected');
+                scheduleReconnect();
+            } else if (pc.iceConnectionState === 'disconnected') {
+                setStatus('disconnected');
+                scheduleReconnect();
             }
         };
 
@@ -98,10 +122,9 @@
 
         pc.ontrack = (e) => {
             dbg('ontrack fired — streams: ' + e.streams.length);
-            document.getElementById('remoteVideo').srcObject = e.streams[0];
+            video.srcObject = e.streams[0];
         };
 
-        // Wait for ICE gathering to finish so all candidates are in the SDP
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
         await new Promise(resolve => {
@@ -140,17 +163,27 @@
         dbg('Error: ' + data.message);
         setStatus('disconnected');
         document.getElementById('conn-label').textContent = data.message;
+        scheduleReconnect();
     });
 
-    const video = document.getElementById('remoteVideo');
-
+    // ── Input forwarding ────────────────────────────────────────────────────────
     function send(obj) {
         if (dc && dc.readyState === 'open') dc.send(JSON.stringify(obj));
     }
 
     function pos(e) {
-        const r = video.getBoundingClientRect();
-        return { x: (e.clientX - r.left) / r.width, y: (e.clientY - r.top) / r.height };
+        const r  = video.getBoundingClientRect();
+        const vw = video.videoWidth  || r.width;
+        const vh = video.videoHeight || r.height;
+        const scale = Math.min(r.width / vw, r.height / vh);
+        const drawW = vw * scale;
+        const drawH = vh * scale;
+        const ox = (r.width  - drawW) / 2;
+        const oy = (r.height - drawH) / 2;
+        return {
+            x: Math.max(0, Math.min(1, ((e.clientX - r.left) - ox) / drawW)),
+            y: Math.max(0, Math.min(1, ((e.clientY - r.top)  - oy) / drawH)),
+        };
     }
 
     video.addEventListener('mousedown',   (e) => { e.preventDefault(); send({ type: 'mousedown', button: e.button, ...pos(e) }); });
@@ -162,10 +195,12 @@
         send({ type: 'scroll', deltaX: e.deltaX, deltaY: e.deltaY, ...pos(e) });
     }, { passive: false });
 
+    // Throttle mousemove to 50 ms (~20/sec) — enough for smooth control,
+    // no longer causes encoding spikes since cursor is drawn as overlay
     let lastMove = 0;
     video.addEventListener('mousemove', (e) => {
         const now = Date.now();
-        if (now - lastMove < 16) return;
+        if (now - lastMove < 50) return;
         lastMove = now;
         send({ type: 'mousemove', ...pos(e) });
     });
