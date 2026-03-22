@@ -12,7 +12,7 @@
     {% if not has_users %}
     <div class="alert alert-info mb-4">
         No account yet.
-        <a href="{{ url_for('register') }}" class="fw-semibold" style="color:inherit;">
+        <a href="{{ url_for('auth.register') }}" class="fw-semibold" style="color:inherit;">
             Create the first admin account →
         </a>
     </div>

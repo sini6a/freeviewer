@@ -59,7 +59,7 @@
                     <td class="text-end">
                         {% if user["id"] != g.user["id"] %}
                         <div class="d-flex gap-1 justify-content-end">
-                            <form method="post" action="{{ url_for('toggle_admin', user_id=user['id']) }}" class="m-0">
+                            <form method="post" action="{{ url_for('users.toggle_admin', user_id=user['id']) }}" class="m-0">
                                 <button type="submit" class="btn-ghost" title="{{ 'Remove admin' if user['role'] == 'admin' else 'Make admin' }}">
                                     {% if user["role"] == "admin" %}
                                     <i class="bi bi-shield-minus"></i> Remove admin
@@ -74,7 +74,7 @@
                                 <i class="bi bi-key"></i>
                             </button>
                             {% if user["locked_until"] %}
-                            <form method="post" action="{{ url_for('unlock_user', user_id=user['id']) }}" class="m-0">
+                            <form method="post" action="{{ url_for('users.unlock_user', user_id=user['id']) }}" class="m-0">
                                 <button type="submit" class="btn-ghost" title="Unlock account">
                                     <i class="bi bi-unlock"></i>
                                 </button>
@@ -91,7 +91,7 @@
                                 {% endif %}
                             </button>
                             <form method="post"
-                                  action="{{ url_for('delete_user', user_id=user['id']) }}"
+                                  action="{{ url_for('users.delete_user', user_id=user['id']) }}"
                                   data-username="{{ user['username'] }}"
                                   onsubmit="return confirm('Delete ' + this.dataset.username + '? Their devices will remain but become unowned.')"
                                   class="m-0">
@@ -152,7 +152,7 @@
 <!-- Create user modal -->
 <div class="modal fade" id="createUserModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
-        <form method="post" action="{{ url_for('create_user') }}">
+        <form method="post" action="{{ url_for('users.create_user') }}">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Add User</h5>

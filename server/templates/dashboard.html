@@ -69,7 +69,7 @@
                        onfocus="this.style.borderColor='#3b82f6'"
                        onblur="this.style.borderColor='#e2e8f0'">
             </div>
-            <a href="{{ url_for('pair') }}" class="btn-primary-fv">
+            <a href="{{ url_for('dashboard.pair') }}" class="btn-primary-fv">
                 <i class="bi bi-plus-lg"></i> Pair new device
             </a>
         </div>
@@ -120,7 +120,7 @@
                     <td class="text-end dev-actions">
                         <div class="d-flex gap-1 justify-content-end align-items-center">
                             {% if device["status"] == "online" and device["pairing_state"] == "paired" %}
-                            <a href="{{ url_for('connect', device_id=device['device_code']) }}"
+                            <a href="{{ url_for('dashboard.connect', device_id=device['device_code']) }}"
                                class="btn-connect-fv btn-connect">
                                 <i class="bi bi-arrow-right-circle"></i> Connect
                             </a>
@@ -128,7 +128,7 @@
 
                             {% if device["pairing_state"] == "blocked" %}
                             <form method="post"
-                                  action="{{ url_for('unblock_device', device_id=device['device_code']) }}"
+                                  action="{{ url_for('devices.unblock_device', device_id=device['device_code']) }}"
                                   class="m-0">
                                 <button type="submit" class="btn-ghost warning">
                                     <i class="bi bi-unlock"></i> Unblock
@@ -144,7 +144,7 @@
                             </button>
 
                             <form method="post"
-                                  action="{{ url_for('delete_device', device_id=device['device_code']) }}"
+                                  action="{{ url_for('devices.delete_device', device_id=device['device_code']) }}"
                                   onsubmit="return confirm('Delete {{ device['display_name'] }}? This cannot be undone.')"
                                   class="m-0">
                                 <button type="submit" class="btn-icon danger" title="Delete">
@@ -170,7 +170,7 @@
 {% for device in devices %}
 <div class="modal fade" id="renameModal-{{ device['device_code'] }}" tabindex="-1">
     <div class="modal-dialog modal-sm">
-        <form method="post" action="{{ url_for('rename_device', device_id=device['device_code']) }}">
+        <form method="post" action="{{ url_for('devices.rename_device', device_id=device['device_code']) }}">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Rename Device</h5>
@@ -195,7 +195,7 @@
 <div class="fv-card">
     <div class="fv-card-header">
         <h5>Recent Pairing Requests</h5>
-        <a href="{{ url_for('pair') }}" class="btn-ghost">
+        <a href="{{ url_for('dashboard.pair') }}" class="btn-ghost">
             <i class="bi bi-plus-circle"></i> Generate code
         </a>
     </div>

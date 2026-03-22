@@ -446,35 +446,35 @@
 
 {% if g.user %}
 <aside class="fv-sidebar">
-    <a href="{{ url_for('dashboard') }}" class="fv-sidebar-brand">
+    <a href="{{ url_for('dashboard.dashboard') }}" class="fv-sidebar-brand">
         <div class="brand-icon"><i class="bi bi-display"></i></div>
         FreeViewer
     </a>
     <nav class="fv-sidebar-nav">
-        <a href="{{ url_for('dashboard') }}"
-           class="{{ 'active' if request.endpoint == 'dashboard' else '' }}">
+        <a href="{{ url_for('dashboard.dashboard') }}"
+           class="{{ 'active' if request.endpoint == 'dashboard.dashboard' else '' }}">
             <i class="bi bi-grid-1x2-fill"></i> Dashboard
         </a>
-        <a href="{{ url_for('pair') }}"
-           class="{{ 'active' if request.endpoint == 'pair' else '' }}">
+        <a href="{{ url_for('dashboard.pair') }}"
+           class="{{ 'active' if request.endpoint == 'dashboard.pair' else '' }}">
             <i class="bi bi-link-45deg"></i> Pair Device
         </a>
         {% if g.user and g.user["role"] == "admin" %}
         <div style="margin: .75rem 1.5rem .35rem; font-size:.65rem; text-transform:uppercase;
                     letter-spacing:.1em; color:#475569;">Admin</div>
-        <a href="{{ url_for('users') }}"
-           class="{{ 'active' if request.endpoint in ('users','create_user') else '' }}">
+        <a href="{{ url_for('users.users') }}"
+           class="{{ 'active' if request.endpoint in ('users.users', 'users.create_user') else '' }}">
             <i class="bi bi-people"></i> Users
         </a>
-        <a href="{{ url_for('settings') }}"
-           class="{{ 'active' if request.endpoint == 'settings' else '' }}">
+        <a href="{{ url_for('settings.settings') }}"
+           class="{{ 'active' if request.endpoint == 'settings.settings' else '' }}">
             <i class="bi bi-gear"></i> Settings
         </a>
         {% endif %}
     </nav>
     <div class="fv-sidebar-footer">
         <span class="user-email">{{ g.user["username"] }}</span>
-        <form method="post" action="{{ url_for('logout') }}" class="m-0">
+        <form method="post" action="{{ url_for('auth.logout') }}" class="m-0">
             <button class="btn-logout"><i class="bi bi-box-arrow-left me-1"></i>Sign out</button>
         </form>
     </div>
