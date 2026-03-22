@@ -243,6 +243,24 @@ class ScreenShareTrack(VideoStreamTrack):
         frame.time_base = time_base
         return frame
 
+@sio.on('ice_candidate')
+async def on_ice_candidate(data):
+    if pc is None or not data.get('candidate'):
+        return
+    try:
+        from aiortc.sdp import candidate_from_sdp
+        cand = data['candidate']
+        cand_str = cand.get('candidate', '')
+        if cand_str.startswith('candidate:'):
+            cand_str = cand_str[len('candidate:'):]
+        candidate = candidate_from_sdp(cand_str)
+        candidate.sdpMid = cand.get('sdpMid')
+        candidate.sdpMLineIndex = cand.get('sdpMLineIndex', 0)
+        await pc.addIceCandidate(candidate)
+    except Exception as e:
+        print(f"addIceCandidate error: {e}")
+
+
 @sio.on('connect')
 async def on_connect():
     print(f"Connected to server.")

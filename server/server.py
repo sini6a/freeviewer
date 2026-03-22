@@ -633,6 +633,19 @@ def handle_signal(data):
         emit('signal', data, to=target_id)
 
 
+@socketio.on('ice_candidate')
+def handle_ice_candidate(data):
+    target_id = data.get('target_id')
+    if not target_id:
+        return
+    if target_id in agent_sids:
+        # Browser → Agent
+        emit('ice_candidate', {**data, 'sender_id': request.sid}, to=agent_sids[target_id])
+    else:
+        # Agent → Browser
+        emit('ice_candidate', data, to=target_id)
+
+
 @socketio.on('disconnect')
 def handle_disconnect():
     sid = request.sid

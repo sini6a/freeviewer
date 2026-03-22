@@ -792,6 +792,23 @@ class AgentApp:
             CREDS_FILE.unlink(missing_ok=True)
             await sio.disconnect()
 
+        @sio.on("ice_candidate")
+        async def on_ice_candidate(data):
+            if self._pc is None or not data.get("candidate"):
+                return
+            try:
+                from aiortc.sdp import candidate_from_sdp
+                cand = data["candidate"]
+                cand_str = cand.get("candidate", "")
+                if cand_str.startswith("candidate:"):
+                    cand_str = cand_str[len("candidate:"):]
+                candidate = candidate_from_sdp(cand_str)
+                candidate.sdpMid = cand.get("sdpMid")
+                candidate.sdpMLineIndex = cand.get("sdpMLineIndex", 0)
+                await self._pc.addIceCandidate(candidate)
+            except Exception as e:
+                self.alog(f"addIceCandidate error: {e}")
+
         @sio.on("signal")
         async def on_signal(data):
             if not data.get("sdp") or data.get("type") != "offer":

@@ -125,18 +125,17 @@
             video.srcObject = e.streams[0];
         };
 
+        // Trickle ICE: send candidates as they are gathered instead of waiting
+        pc.onicecandidate = (e) => {
+            if (e.candidate) {
+                socket.emit('ice_candidate', { candidate: e.candidate.toJSON(), target_id: DEVICE_ID });
+            }
+        };
+
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
-        await new Promise(resolve => {
-            if (pc.iceGatheringState === 'complete') { resolve(); return; }
-            pc.addEventListener('icegatheringstatechange', function h() {
-                if (pc.iceGatheringState === 'complete') {
-                    pc.removeEventListener('icegatheringstatechange', h);
-                    resolve();
-                }
-            });
-        });
 
+        // Send offer immediately — no waiting for ICE gathering to complete
         dbg('Sending offer to ' + DEVICE_ID);
         answerTimeout = setTimeout(() => {
             dbg('No answer from device — is it online?');
@@ -156,6 +155,14 @@
         if (data.sdp && pc) {
             await pc.setRemoteDescription(new RTCSessionDescription(data));
             dbg('Remote description set');
+        }
+    });
+
+    socket.on('ice_candidate', async (data) => {
+        if (data.candidate && pc) {
+            try {
+                await pc.addIceCandidate(new RTCIceCandidate(data.candidate));
+            } catch (e) { dbg('addIceCandidate error: ' + e); }
         }
     });
 
