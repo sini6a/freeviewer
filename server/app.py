@@ -7,6 +7,7 @@ import pymysql
 import pymysql.cursors
 from dotenv import load_dotenv
 from flask import Flask, g, render_template, session
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from .db import close_db, init_db, query_one
 from .extensions import agent_sids, csrf, socketio
@@ -24,6 +25,7 @@ log = logging.getLogger("freeviewer")
 
 def create_app() -> Flask:
     app = Flask(__name__)
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     secret = os.environ.get("SECRET_KEY", "").strip()
     if not secret:
