@@ -365,12 +365,30 @@
             background: #000;
             box-shadow: 0 4px 24px rgba(0,0,0,.3);
             min-height: 0;
+            position: relative;
         }
 
         .connect-video-wrap video {
             width: 100%; height: 100%; display: block;
             object-fit: contain; cursor: crosshair;
         }
+
+        #fsBtn {
+            position: absolute;
+            top: .6rem; right: .6rem;
+            width: 2rem; height: 2rem;
+            border: none; border-radius: 6px;
+            background: rgba(0,0,0,.55);
+            color: #fff;
+            font-size: .95rem;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            opacity: 0;
+            transition: opacity .15s;
+            z-index: 10;
+        }
+        .connect-video-wrap:hover #fsBtn { opacity: 1; }
+        #fsBtn:hover { background: rgba(0,0,0,.8); }
 
         /* ── Alerts ──────────────────────────────────────────────────── */
         .alert {

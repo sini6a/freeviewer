@@ -25,8 +25,11 @@
         </span>
     </div>
 
-    <div class="connect-video-wrap">
+    <div class="connect-video-wrap" id="videoWrap">
         <video id="remoteVideo" autoplay playsinline></video>
+        <button id="fsBtn" onclick="toggleFullscreen()" title="Fullscreen">
+            <i class="bi bi-fullscreen" id="fsIcon"></i>
+        </button>
     </div>
 
     <p style="font-size:.74rem;color:#94a3b8;text-align:center;margin:0;">
@@ -231,5 +234,23 @@
     });
 
     startSession();
+
+    // ── Fullscreen ───────────────────────────────────────────────────────────────
+    function toggleFullscreen() {
+        if (!document.fullscreenElement) {
+            document.getElementById('videoWrap').requestFullscreen();
+        } else {
+            document.exitFullscreen();
+        }
+    }
+
+    document.addEventListener('fullscreenchange', () => {
+        const icon = document.getElementById('fsIcon');
+        if (document.fullscreenElement) {
+            icon.className = 'bi bi-fullscreen-exit';
+        } else {
+            icon.className = 'bi bi-fullscreen';
+        }
+    });
 </script>
 {% endblock %}
