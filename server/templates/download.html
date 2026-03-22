@@ -63,7 +63,10 @@
         <a href="{{ download_url }}" class="btn">
             <i class="bi bi-download"></i> Download for Windows
         </a>
-        <div class="note">Windows 10 / 11 &nbsp;·&nbsp; 64-bit</div>
+        <div class="note">
+            Windows 10 / 11 &nbsp;·&nbsp; 64-bit
+            {% if version %}&nbsp;·&nbsp; {{ version }}{% endif %}
+        </div>
     </div>
 </body>
 </html>

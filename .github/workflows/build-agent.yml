@@ -7,12 +7,21 @@ on:
     paths:
       - 'agent/**'
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
 
     steps:
       - uses: actions/checkout@v4
+
+      - name: Read version
+        id: ver
+        run: |
+          $version = (Get-Content agent/version.txt -Raw).Trim()
+          echo "version=$version" >> $env:GITHUB_OUTPUT
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -33,9 +42,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release delete latest --yes 2>$null || true
-          git tag -d latest 2>$null || true
-          git push origin :refs/tags/latest 2>$null || true
-          gh release create latest agent/dist/FreeViewer.exe `
-            --title "Latest Build" `
+          gh release create "v${{ steps.ver.outputs.version }}" agent/dist/FreeViewer.exe `
+            --title "v${{ steps.ver.outputs.version }}" `
             --notes "Built from commit ${{ github.sha }}"
