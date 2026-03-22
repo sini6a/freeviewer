@@ -96,24 +96,29 @@
         if (pc) { try { pc.close(); } catch (_) {} pc = null; dc = null; }
 
         let iceServers = [{ urls: 'stun:stun.l.google.com:19302' }];
+        let preferredCodec = 'h264';
         try {
             const r = await fetch('/api/ice-config');
             const cfg = await r.json();
             dbg('ICE config: ' + JSON.stringify(cfg.iceServers));
             if (cfg.iceServers?.length) iceServers = cfg.iceServers;
+            if (cfg.preferredCodec) preferredCodec = cfg.preferredCodec;
         } catch (e) { dbg('ICE config fetch failed: ' + e); }
+
+        dbg('Preferred codec: ' + preferredCodec);
 
         pc = new RTCPeerConnection({ iceServers });
         dc = pc.createDataChannel("control");
         const transceiver = pc.addTransceiver('video', { direction: 'recvonly' });
 
-        // Prefer H.264 over VP8 — better compression, hardware-decodable on most devices
+        // Apply codec preference from server settings
         try {
             const caps = RTCRtpReceiver.getCapabilities('video');
             if (caps) {
-                const h264 = caps.codecs.filter(c => c.mimeType === 'video/H264');
-                const rest = caps.codecs.filter(c => c.mimeType !== 'video/H264');
-                if (h264.length) transceiver.setCodecPreferences([...h264, ...rest]);
+                const mime = preferredCodec === 'vp8' ? 'video/VP8' : 'video/H264';
+                const preferred = caps.codecs.filter(c => c.mimeType === mime);
+                const rest      = caps.codecs.filter(c => c.mimeType !== mime);
+                if (preferred.length) transceiver.setCodecPreferences([...preferred, ...rest]);
             }
         } catch (_) {}
 

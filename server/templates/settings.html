@@ -165,6 +165,16 @@
                             {% endfor %}
                         </select>
                     </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Video codec</label>
+                        <select name="video_codec" class="form-select">
+                            <option value="h264" {% if video_codec == "h264" %}selected{% endif %}>H.264 (recommended)</option>
+                            <option value="vp8"  {% if video_codec == "vp8"  %}selected{% endif %}>VP8</option>
+                        </select>
+                        <div style="font-size:.75rem;color:#94a3b8;margin-top:.35rem;">
+                            H.264 offers better compression and hardware decoding on most devices.
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

@@ -469,6 +469,10 @@ def create_app() -> Flask:
             set_setting("timezone",          tz)
             set_setting("agent_resolution",  request.form.get("agent_resolution", "native"))
             set_setting("agent_fps",         request.form.get("agent_fps", "30"))
+            codec = request.form.get("video_codec", "h264")
+            if codec not in ("h264", "vp8"):
+                codec = "h264"
+            set_setting("video_codec",       codec)
             set_setting("stun_url",          request.form.get("stun_url", "").strip())
             set_setting("turn_url",        request.form.get("turn_url", "").strip())
             set_setting("turn_username",   request.form.get("turn_username", "").strip())
@@ -480,6 +484,7 @@ def create_app() -> Flask:
             timezone=get_setting("timezone", "UTC") or "UTC",
             agent_resolution=get_setting("agent_resolution", "native") or "native",
             agent_fps=int(get_setting("agent_fps", "30") or 30),
+            video_codec=get_setting("video_codec", "h264") or "h264",
             stun_url=get_setting("stun_url", ""),
             turn_url=get_setting("turn_url", ""),
             turn_username=get_setting("turn_username", ""),
@@ -491,7 +496,10 @@ def create_app() -> Flask:
     @app.route("/api/ice-config")
     @login_required
     def ice_config():
-        return jsonify({"iceServers": get_ice_servers()})
+        return jsonify({
+            "iceServers": get_ice_servers(),
+            "preferredCodec": get_setting("video_codec", "h264") or "h264",
+        })
 
     socketio.init_app(app)
 
