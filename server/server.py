@@ -6,6 +6,10 @@ import sqlite3
 from functools import wraps
 from pathlib import Path
 from datetime import datetime, timedelta, timezone
+try:
+    from zoneinfo import ZoneInfo
+except ImportError:
+    from backports.zoneinfo import ZoneInfo
 
 logging.basicConfig(
     level=logging.INFO,
@@ -44,12 +48,20 @@ agent_sids = {}
 
 
 def _fmt_dt(value):
-    """Format an ISO timestamp string as '21 Mar 2026, 14:06'."""
+    """Format an ISO timestamp string as '21 Mar 2026, 14:06' in the configured timezone."""
     if not value:
         return "—"
     try:
+        from flask import g, has_request_context
         dt = datetime.fromisoformat(str(value))
-        return dt.strftime("%d %b %Y, %H:%M").lstrip("0")
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        tz_name = g.display_timezone if has_request_context() and hasattr(g, "display_timezone") else "UTC"
+        try:
+            tz = ZoneInfo(tz_name)
+        except Exception:
+            tz = timezone.utc
+        return dt.astimezone(tz).strftime("%d %b %Y, %H:%M").lstrip("0")
     except Exception:
         return str(value)
 
@@ -63,13 +75,17 @@ def create_app() -> Flask:
 
     @app.before_request
     def load_logged_in_user():
+        g.display_timezone = get_setting("timezone", "UTC") or "UTC"
         user_id = session.get("user_id")
         g.user = None
         if user_id is not None:
             g.user = query_one(
-                "SELECT id, email, role, created_at FROM users WHERE id = ?",
+                "SELECT id, username, role, banned, created_at FROM users WHERE id = ?",
                 (user_id,),
             )
+            if g.user and g.user["banned"]:
+                session.clear()
+                g.user = None
 
     @app.route("/")
     def index():
@@ -85,21 +101,31 @@ def create_app() -> Flask:
         has_users = query_one("SELECT id FROM users LIMIT 1") is not None
 
         if request.method == "POST":
-            email = request.form.get("email", "").strip().lower()
+            username = request.form.get("username", "").strip()
             password = request.form.get("password", "")
 
-            user = query_one(
-                "SELECT id, email, password_hash FROM users WHERE email = ?",
-                (email,),
-            )
-
-            if not user or not check_password_hash(user["password_hash"], password):
-                flash("Invalid email or password.", "error")
+            is_locked, remaining = _check_lockout(username)
+            if is_locked:
+                mins, secs = divmod(remaining, 60)
+                flash(f"Account locked due to too many failed attempts. Try again in {mins}m {secs}s.", "error")
             else:
-                session.clear()
-                session["user_id"] = user["id"]
-                flash("Welcome back.", "success")
-                return redirect(url_for("dashboard"))
+                user = query_one(
+                    "SELECT id, username, password_hash, banned FROM users WHERE username = ?",
+                    (username,),
+                )
+
+                if not user or not check_password_hash(user["password_hash"], password):
+                    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
+                    _record_failed_attempt(username, ip)
+                    flash("Invalid username or password.", "error")
+                elif user["banned"]:
+                    flash("This account has been banned.", "error")
+                else:
+                    _reset_login_attempts(username)
+                    session.clear()
+                    session["user_id"] = user["id"]
+                    flash("Welcome back.", "success")
+                    return redirect(url_for("dashboard"))
 
         return render_template("login.html", has_users=has_users)
 
@@ -111,18 +137,18 @@ def create_app() -> Flask:
             return redirect(url_for("login"))
 
         if request.method == "POST":
-            email = request.form.get("email", "").strip().lower()
+            username = request.form.get("username", "").strip()
             password = request.form.get("password", "")
             confirm_password = request.form.get("confirm_password", "")
 
-            if not email or not password:
-                flash("Email and password are required.", "error")
+            if not username or not password:
+                flash("Username and password are required.", "error")
             elif password != confirm_password:
                 flash("Passwords do not match.", "error")
             else:
                 execute(
-                    "INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')",
-                    (email, generate_password_hash(password)),
+                    "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'admin')",
+                    (username, generate_password_hash(password)),
                 )
                 flash("Admin account created. You can sign in now.", "success")
                 return redirect(url_for("login"))
@@ -145,7 +171,7 @@ def create_app() -> Flask:
                 """
                 SELECT d.id, d.display_name, d.device_code, d.owner_email, d.owner_user_id,
                        d.status, d.pairing_state, d.hostname, d.last_seen_at, d.created_at,
-                       u.email AS owner_email_resolved
+                       u.username AS owner_username_resolved
                 FROM devices d
                 LEFT JOIN users u ON u.id = d.owner_user_id
                 ORDER BY d.created_at DESC
@@ -156,7 +182,7 @@ def create_app() -> Flask:
                 """
                 SELECT d.id, d.display_name, d.device_code, d.owner_email, d.owner_user_id,
                        d.status, d.pairing_state, d.hostname, d.last_seen_at, d.created_at,
-                       u.email AS owner_email_resolved
+                       u.username AS owner_username_resolved
                 FROM devices d
                 LEFT JOIN users u ON u.id = d.owner_user_id
                 WHERE d.owner_user_id = ?
@@ -167,7 +193,7 @@ def create_app() -> Flask:
         pairing_requests = query_all(
             """
             SELECT pr.id, pr.code, pr.status, pr.expires_at, pr.created_at,
-                   u.email AS requested_by_email
+                   u.username AS requested_by_username
             FROM pairing_requests pr
             JOIN users u ON u.id = pr.user_id
             WHERE pr.user_id = ?
@@ -178,7 +204,7 @@ def create_app() -> Flask:
         ) if not is_admin else query_all(
             """
             SELECT pr.id, pr.code, pr.status, pr.expires_at, pr.created_at,
-                   u.email AS requested_by_email
+                   u.username AS requested_by_username
             FROM pairing_requests pr
             JOIN users u ON u.id = pr.user_id
             ORDER BY pr.created_at DESC
@@ -208,7 +234,7 @@ def create_app() -> Flask:
         latest_request = query_one(
             """
             SELECT pr.id, pr.code, pr.status, pr.expires_at, pr.created_at,
-                   u.email AS requested_by_email
+                   u.username AS requested_by_username
             FROM pairing_requests pr
             JOIN users u ON u.id = pr.user_id
             WHERE pr.user_id = ?
@@ -234,7 +260,7 @@ def create_app() -> Flask:
         pending_requests = query_all(
             """
             SELECT pr.id, pr.code, pr.status, pr.expires_at, pr.created_at,
-                   u.email AS requested_by_email
+                   u.username AS requested_by_username
             FROM pairing_requests pr
             JOIN users u ON u.id = pr.user_id
             ORDER BY pr.created_at DESC
@@ -329,28 +355,44 @@ def create_app() -> Flask:
     @app.route("/users")
     @admin_required
     def users():
+        now = utc_now().isoformat()
         all_users = query_all(
-            "SELECT id, email, role, created_at FROM users ORDER BY created_at"
+            """
+            SELECT u.id, u.username, u.role, u.banned, u.created_at,
+                   CASE WHEN la.locked_until > ? THEN la.locked_until ELSE NULL END AS locked_until
+            FROM users u
+            LEFT JOIN login_attempts la ON la.username = u.username
+            ORDER BY u.created_at
+            """,
+            (now,),
         )
-        return render_template("users.html", users=all_users)
+        attempt_log = query_all(
+            """
+            SELECT username, ip_address, attempted_at
+            FROM login_attempt_log
+            ORDER BY attempted_at DESC
+            LIMIT 100
+            """
+        )
+        return render_template("users.html", users=all_users, attempt_log=attempt_log)
 
     @app.route("/users", methods=("POST",))
     @admin_required
     def create_user():
-        email    = request.form.get("email", "").strip().lower()
+        username = request.form.get("username", "").strip()
         password = request.form.get("password", "")
         role     = request.form.get("role", "user")
-        if not email or not password:
-            flash("Email and password are required.", "error")
+        if not username or not password:
+            flash("Username and password are required.", "error")
             return redirect(url_for("users"))
-        if query_one("SELECT id FROM users WHERE email = ?", (email,)):
-            flash("That email is already registered.", "error")
+        if query_one("SELECT id FROM users WHERE username = ?", (username,)):
+            flash("That username is already taken.", "error")
             return redirect(url_for("users"))
         execute(
-            "INSERT INTO users (email, password_hash, role) VALUES (?, ?, ?)",
-            (email, generate_password_hash(password), role),
+            "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
+            (username, generate_password_hash(password), role),
         )
-        flash(f"User {email} created.", "success")
+        flash(f"User {username} created.", "success")
         return redirect(url_for("users"))
 
     @app.route("/users/<int:user_id>/delete", methods=("POST",))
@@ -376,12 +418,58 @@ def create_app() -> Flask:
             flash(f"Role updated to {new_role}.", "success")
         return redirect(url_for("users"))
 
+    @app.route("/users/<int:user_id>/unlock", methods=("POST",))
+    @admin_required
+    def unlock_user(user_id):
+        user = query_one("SELECT username FROM users WHERE id = ?", (user_id,))
+        if user:
+            _reset_login_attempts(user["username"])
+            flash(f"{user['username']} has been unlocked.", "success")
+        return redirect(url_for("users"))
+
+    @app.route("/users/<int:user_id>/change-password", methods=("POST",))
+    @admin_required
+    def change_password(user_id):
+        new_password = request.form.get("new_password", "")
+        if not new_password:
+            flash("Password cannot be empty.", "error")
+            return redirect(url_for("users"))
+        execute(
+            "UPDATE users SET password_hash = ? WHERE id = ?",
+            (generate_password_hash(new_password), user_id),
+        )
+        flash("Password updated.", "success")
+        return redirect(url_for("users"))
+
+    @app.route("/users/<int:user_id>/toggle-ban", methods=("POST",))
+    @admin_required
+    def toggle_ban(user_id):
+        if user_id == g.user["id"]:
+            flash("You cannot ban your own account.", "error")
+            return redirect(url_for("users"))
+        user = query_one("SELECT banned FROM users WHERE id = ?", (user_id,))
+        if user:
+            new_banned = 0 if user["banned"] else 1
+            execute("UPDATE users SET banned = ? WHERE id = ?", (new_banned, user_id))
+            flash("User banned." if new_banned else "User unbanned.", "success")
+        return redirect(url_for("users"))
+
     # ── Settings (admin only) ─────────────────────────────────────────────────
 
     @app.route("/settings", methods=("GET", "POST"))
     @admin_required
     def settings():
         if request.method == "POST":
+            tz = request.form.get("timezone", "UTC").strip()
+            try:
+                ZoneInfo(tz)  # validate
+            except Exception:
+                tz = "UTC"
+                flash("Invalid timezone — reset to UTC.", "error")
+            set_setting("timezone",          tz)
+            set_setting("agent_resolution",  request.form.get("agent_resolution", "native"))
+            set_setting("agent_fps",         request.form.get("agent_fps", "30"))
+            set_setting("stun_url",          request.form.get("stun_url", "").strip())
             set_setting("turn_url",        request.form.get("turn_url", "").strip())
             set_setting("turn_username",   request.form.get("turn_username", "").strip())
             set_setting("turn_credential", request.form.get("turn_credential", "").strip())
@@ -389,6 +477,10 @@ def create_app() -> Flask:
             return redirect(url_for("settings"))
         return render_template(
             "settings.html",
+            timezone=get_setting("timezone", "UTC") or "UTC",
+            agent_resolution=get_setting("agent_resolution", "native") or "native",
+            agent_fps=int(get_setting("agent_fps", "30") or 30),
+            stun_url=get_setting("stun_url", ""),
             turn_url=get_setting("turn_url", ""),
             turn_username=get_setting("turn_username", ""),
             turn_credential=get_setting("turn_credential", ""),
@@ -530,7 +622,8 @@ def handle_signal(data):
     if target_id in agent_sids:
         log.info("signal %s: browser %s → agent %s", sig_type, request.sid[:8], target_id)
         emit('signal', {**data, 'sender_id': request.sid,
-                        'ice_servers': get_ice_servers()}, to=agent_sids[target_id])
+                        'ice_servers': get_ice_servers(),
+                        'capture_settings': get_capture_settings()}, to=agent_sids[target_id])
     elif data.get('type') == 'offer':
         log.warning("signal offer: agent %s not in agent_sids (connected agents: %s)",
                     target_id, list(agent_sids.keys()))
@@ -585,7 +678,7 @@ def init_db():
         """
         CREATE TABLE IF NOT EXISTS users (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            email TEXT NOT NULL UNIQUE,
+            username TEXT NOT NULL UNIQUE,
             password_hash TEXT NOT NULL,
             created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
@@ -620,6 +713,21 @@ def init_db():
             key   TEXT PRIMARY KEY,
             value TEXT
         );
+
+        CREATE TABLE IF NOT EXISTS login_attempts (
+            username      TEXT PRIMARY KEY,
+            failed_count  INTEGER NOT NULL DEFAULT 0,
+            locked_until  TEXT,
+            lockout_level INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE TABLE IF NOT EXISTS login_attempt_log (
+            id           INTEGER PRIMARY KEY AUTOINCREMENT,
+            username     TEXT NOT NULL,
+            ip_address   TEXT,
+            attempted_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+
         """
     )
     ensure_column(db, "devices", "owner_user_id", "INTEGER")
@@ -628,6 +736,13 @@ def init_db():
     ensure_column(db, "devices", "os_version", "TEXT")
     ensure_column(db, "devices", "device_token", "TEXT")
     ensure_column(db, "users", "role", "TEXT NOT NULL DEFAULT 'user'")
+    ensure_column(db, "users", "banned", "INTEGER NOT NULL DEFAULT 0")
+    # Migrate existing databases: add username column and copy from email if present
+    user_columns = {row["name"] for row in db.execute("PRAGMA table_info(users)").fetchall()}
+    if "username" not in user_columns:
+        db.execute("ALTER TABLE users ADD COLUMN username TEXT NOT NULL DEFAULT ''")
+        if "email" in user_columns:
+            db.execute("UPDATE users SET username = email WHERE username = ''")
     db.commit()
 
 
@@ -670,6 +785,63 @@ def utc_now():
     return datetime.now(timezone.utc)
 
 
+# ── Login rate-limiting ────────────────────────────────────────────────────────
+
+_LOCKOUT_DURATIONS = [10, 30, 60, 120]  # minutes per escalation level
+_LOCKOUT_THRESHOLD = 5                  # failed attempts before lockout
+
+
+def _check_lockout(username: str):
+    """Return (is_locked, seconds_remaining). Does not modify state."""
+    row = query_one(
+        "SELECT locked_until FROM login_attempts WHERE username = ?", (username,)
+    )
+    if not row or not row["locked_until"]:
+        return False, 0
+    locked_until = datetime.fromisoformat(row["locked_until"])
+    remaining = (locked_until - utc_now()).total_seconds()
+    return (remaining > 0, max(0, int(remaining)))
+
+
+def _record_failed_attempt(username: str, ip_address: str | None = None):
+    """Increment failure counter, apply/escalate lockout when threshold is hit, and log the event."""
+    execute(
+        "INSERT INTO login_attempt_log (username, ip_address) VALUES (?, ?)",
+        (username, ip_address),
+    )
+    row = query_one(
+        "SELECT failed_count, lockout_level FROM login_attempts WHERE username = ?",
+        (username,),
+    )
+    if row is None:
+        execute(
+            "INSERT INTO login_attempts (username, failed_count, lockout_level) VALUES (?, 1, 0)",
+            (username,),
+        )
+        return
+
+    failed_count  = row["failed_count"] + 1
+    lockout_level = row["lockout_level"]
+    locked_until  = None
+
+    if failed_count >= _LOCKOUT_THRESHOLD:
+        duration = _LOCKOUT_DURATIONS[min(lockout_level, len(_LOCKOUT_DURATIONS) - 1)]
+        locked_until  = (utc_now() + timedelta(minutes=duration)).isoformat()
+        lockout_level += 1
+        failed_count  = 0
+
+    execute(
+        """UPDATE login_attempts
+           SET failed_count = ?, locked_until = ?, lockout_level = ?
+           WHERE username = ?""",
+        (failed_count, locked_until, lockout_level, username),
+    )
+
+
+def _reset_login_attempts(username: str):
+    execute("DELETE FROM login_attempts WHERE username = ?", (username,))
+
+
 def login_required(view):
     @wraps(view)
     def wrapped_view(**kwargs):
@@ -703,8 +875,25 @@ def set_setting(key, value):
     )
 
 
+_DEFAULT_STUN = "stun:stun.l.google.com:19302"
+
+
+def get_capture_settings() -> dict:
+    res = get_setting("agent_resolution", "native")
+    fps = int(get_setting("agent_fps", "30") or 30)
+    resolution_map = {
+        "hd":     (1280, 720),
+        "fhd":    (1920, 1080),
+        "2k":     (2560, 1440),
+        "native": (3840, 2160),
+    }
+    max_w, max_h = resolution_map.get(res, (3840, 2160))
+    return {"max_width": max_w, "max_height": max_h, "fps": fps}
+
+
 def get_ice_servers() -> list:
-    servers = [{"urls": "stun:stun.l.google.com:19302"}]
+    stun_url  = get_setting("stun_url", "") or _DEFAULT_STUN
+    servers   = [{"urls": stun_url}]
     turn_url  = get_setting("turn_url", "")
     turn_user = get_setting("turn_username", "")
     turn_cred = get_setting("turn_credential", "")

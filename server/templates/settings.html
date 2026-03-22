@@ -10,8 +10,10 @@
 <form method="post">
 <div class="row g-4">
 
-    <!-- TURN / ICE config -->
+    <!-- Left column -->
     <div class="col-lg-7">
+
+        <!-- TURN / ICE config -->
         <div class="fv-card">
             <div class="fv-card-header">
                 <h5>WebRTC / TURN Server</h5>
@@ -27,6 +29,16 @@
                     cannot be established (strict NAT, corporate networks, mobile carriers).
                     Leave blank to use STUN only, which works for most home and office networks.
                 </p>
+
+                <div class="mb-3">
+                    <label class="form-label">STUN server URL</label>
+                    <input type="text" name="stun_url" class="form-control"
+                           value="{{ stun_url }}"
+                           placeholder="stun:stun.l.google.com:19302">
+                    <div style="font-size:.75rem;color:#94a3b8;margin-top:.35rem;">
+                        Leave blank to use Google's free STUN server.
+                    </div>
+                </div>
 
                 <div class="mb-3">
                     <label class="form-label">TURN server URL</label>
@@ -51,26 +63,114 @@
                            value="{{ turn_credential }}" placeholder="Leave blank if not required">
                 </div>
 
-                <div class="d-flex gap-2 align-items-center">
-                    <button type="submit" class="btn-primary-fv">
-                        <i class="bi bi-check2"></i> Save settings
-                    </button>
-                    {% if turn_url %}
-                    <button type="button" class="btn-ghost"
-                            onclick="document.querySelector('[name=turn_url]').value='';
-                                     document.querySelector('[name=turn_username]').value='';
-                                     document.querySelector('[name=turn_credential]').value='';">
-                        <i class="bi bi-x"></i> Clear TURN
-                    </button>
-                    {% endif %}
+                {% if turn_url %}
+                <button type="button" class="btn-ghost"
+                        onclick="document.querySelector('[name=turn_url]').value='';
+                                 document.querySelector('[name=turn_username]').value='';
+                                 document.querySelector('[name=turn_credential]').value='';">
+                    <i class="bi bi-x"></i> Clear TURN
+                </button>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Timezone -->
+        <div class="fv-card mt-4">
+            <div class="fv-card-header">
+                <h5>Timezone</h5>
+            </div>
+            <div class="fv-card-body">
+                <div class="mb-3">
+                    <label class="form-label">Display timezone</label>
+                    <select name="timezone" class="form-select">
+                        {% set cur = timezone %}
+                        {% set groups = [
+                            ("UTC", ["UTC"]),
+                            ("Europe", [
+                                "Europe/London","Europe/Dublin","Europe/Lisbon",
+                                "Europe/Paris","Europe/Berlin","Europe/Amsterdam",
+                                "Europe/Brussels","Europe/Rome","Europe/Madrid",
+                                "Europe/Warsaw","Europe/Prague","Europe/Budapest",
+                                "Europe/Vienna","Europe/Zurich","Europe/Stockholm",
+                                "Europe/Oslo","Europe/Copenhagen","Europe/Helsinki",
+                                "Europe/Athens","Europe/Bucharest","Europe/Kiev",
+                                "Europe/Moscow","Europe/Istanbul"
+                            ]),
+                            ("Americas", [
+                                "America/New_York","America/Detroit","America/Chicago",
+                                "America/Denver","America/Phoenix","America/Los_Angeles",
+                                "America/Anchorage","America/Honolulu",
+                                "America/Toronto","America/Vancouver","America/Winnipeg",
+                                "America/Halifax","America/St_Johns",
+                                "America/Sao_Paulo","America/Argentina/Buenos_Aires",
+                                "America/Santiago","America/Bogota","America/Lima",
+                                "America/Caracas","America/Mexico_City"
+                            ]),
+                            ("Asia / Pacific", [
+                                "Asia/Dubai","Asia/Karachi","Asia/Kolkata",
+                                "Asia/Dhaka","Asia/Bangkok","Asia/Singapore",
+                                "Asia/Hong_Kong","Asia/Shanghai","Asia/Tokyo",
+                                "Asia/Seoul","Asia/Jakarta","Asia/Taipei",
+                                "Asia/Riyadh","Asia/Tehran","Asia/Kabul",
+                                "Asia/Tashkent","Asia/Yekaterinburg","Asia/Almaty",
+                                "Australia/Perth","Australia/Darwin","Australia/Adelaide",
+                                "Australia/Sydney","Australia/Brisbane",
+                                "Pacific/Auckland","Pacific/Fiji","Pacific/Honolulu"
+                            ]),
+                            ("Africa", [
+                                "Africa/Casablanca","Africa/Abidjan","Africa/Lagos",
+                                "Africa/Nairobi","Africa/Johannesburg","Africa/Cairo",
+                                "Africa/Addis_Ababa"
+                            ])
+                        ] %}
+                        {% for group_name, zones in groups %}
+                        <optgroup label="{{ group_name }}">
+                            {% for tz in zones %}
+                            <option value="{{ tz }}" {% if tz == cur %}selected{% endif %}>{{ tz.replace("_", " ") }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endfor %}
+                    </select>
+                    <div style="font-size:.75rem;color:#94a3b8;margin-top:.35rem;">
+                        All timestamps in the UI will be displayed in this timezone.
+                    </div>
                 </div>
             </div>
         </div>
-    </div>
 
-    <!-- Debug panel toggle -->
-    <div class="col-lg-7">
-        <div class="fv-card">
+        <!-- Agent capture settings -->
+        <div class="fv-card mt-4">
+            <div class="fv-card-header">
+                <h5>Agent Capture</h5>
+            </div>
+            <div class="fv-card-body">
+                <p style="font-size:.84rem;color:#64748b;margin:0 0 1.25rem;">
+                    Applied to all connected agents when a viewer connects. Changes take effect on the next connection.
+                </p>
+                <div class="row g-3">
+                    <div class="col-sm-6">
+                        <label class="form-label">Resolution</label>
+                        <select name="agent_resolution" class="form-select">
+                            <option value="native" {% if agent_resolution == "native" %}selected{% endif %}>Native (up to 4K)</option>
+                            <option value="2k"     {% if agent_resolution == "2k"     %}selected{% endif %}>2K (2560×1440)</option>
+                            <option value="fhd"    {% if agent_resolution == "fhd"    %}selected{% endif %}>Full HD (1920×1080)</option>
+                            <option value="hd"     {% if agent_resolution == "hd"     %}selected{% endif %}>HD (1280×720)</option>
+                        </select>
+                    </div>
+                    <div class="col-sm-6">
+                        <label class="form-label">Frame rate</label>
+                        <select name="agent_fps" class="form-select">
+                            {% for fps in [10, 15, 20, 25, 30] %}
+                            <option value="{{ fps }}" {% if agent_fps == fps %}selected{% endif %}>{{ fps }} fps</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Debug panel toggle -->
+        <div class="fv-card mt-4">
             <div class="fv-card-header">
                 <h5>Developer Options</h5>
             </div>
@@ -89,9 +189,10 @@
                 </div>
             </div>
         </div>
+
     </div>
 
-    <!-- Info panel -->
+    <!-- Right column / Info panel -->
     <div class="col-lg-5">
         <div class="fv-card">
             <div class="fv-card-header"><h5>How it works</h5></div>
@@ -131,6 +232,12 @@
         </div>
     </div>
 
+</div>
+
+<div class="mt-4">
+    <button type="submit" class="btn-primary-fv">
+        <i class="bi bi-check2"></i> Save settings
+    </button>
 </div>
 </form>
 {% endblock %}

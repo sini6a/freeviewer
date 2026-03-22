@@ -22,7 +22,7 @@
         <table class="table fv-table">
             <thead>
                 <tr>
-                    <th>Email</th>
+                    <th>Username</th>
                     <th>Role</th>
                     <th>Created</th>
                     <th class="text-end">Actions</th>
@@ -32,17 +32,28 @@
                 {% for user in users %}
                 <tr>
                     <td>
-                        <div class="device-name">{{ user["email"] }}</div>
+                        <div class="device-name">{{ user["username"] }}</div>
                         {% if user["id"] == g.user["id"] %}
                         <div style="font-size:.72rem;color:#94a3b8;">You</div>
                         {% endif %}
                     </td>
                     <td>
-                        {% if user["role"] == "admin" %}
+                        <div class="d-flex flex-wrap gap-1">
+                        {% if user["banned"] %}
+                        <span class="fv-badge" style="background:#fee2e2;color:#991b1b;">
+                            <span class="fv-badge-dot" style="background:#dc2626;"></span>Banned
+                        </span>
+                        {% elif user["role"] == "admin" %}
                         <span class="fv-badge paired">Admin</span>
                         {% else %}
                         <span class="fv-badge offline">User</span>
                         {% endif %}
+                        {% if user["locked_until"] %}
+                        <span class="fv-badge" style="background:#fef3c7;color:#92400e;">
+                            <span class="fv-badge-dot" style="background:#f59e0b;"></span>Locked
+                        </span>
+                        {% endif %}
+                        </div>
                     </td>
                     <td style="color:#94a3b8;font-size:.8rem;">{{ user["created_at"] | dt }}</td>
                     <td class="text-end">
@@ -57,10 +68,32 @@
                                     {% endif %}
                                 </button>
                             </form>
+                            <button type="button" class="btn-ghost"
+                                    title="Change password"
+                                    onclick="openChangePassword({{ user['id'] }}, '{{ user['username'] }}')">
+                                <i class="bi bi-key"></i>
+                            </button>
+                            {% if user["locked_until"] %}
+                            <form method="post" action="{{ url_for('unlock_user', user_id=user['id']) }}" class="m-0">
+                                <button type="submit" class="btn-ghost" title="Unlock account">
+                                    <i class="bi bi-unlock"></i>
+                                </button>
+                            </form>
+                            {% endif %}
+                            <button type="button"
+                                    class="btn-ghost {% if not user['banned'] %}danger-text{% endif %}"
+                                    title="{{ 'Unban' if user['banned'] else 'Ban' }} user"
+                                    onclick="openToggleBan({{ user['id'] }}, '{{ user['username'] }}', {{ 'true' if user['banned'] else 'false' }})">
+                                {% if user["banned"] %}
+                                <i class="bi bi-person-check"></i>
+                                {% else %}
+                                <i class="bi bi-person-slash"></i>
+                                {% endif %}
+                            </button>
                             <form method="post"
                                   action="{{ url_for('delete_user', user_id=user['id']) }}"
-                                  data-email="{{ user['email'] }}"
-                                  onsubmit="return confirm('Delete ' + this.dataset.email + '? Their devices will remain but become unowned.')"
+                                  data-username="{{ user['username'] }}"
+                                  onsubmit="return confirm('Delete ' + this.dataset.username + '? Their devices will remain but become unowned.')"
                                   class="m-0">
                                 <button type="submit" class="btn-icon danger" title="Delete user">
                                     <i class="bi bi-trash"></i>
@@ -68,7 +101,11 @@
                             </form>
                         </div>
                         {% else %}
-                        <span style="font-size:.75rem;color:#64748b;">—</span>
+                        <button type="button" class="btn-ghost"
+                                title="Change your password"
+                                onclick="openChangePassword({{ user['id'] }}, '{{ user['username'] }}')">
+                            <i class="bi bi-key"></i>
+                        </button>
                         {% endif %}
                     </td>
                 </tr>
@@ -76,6 +113,40 @@
             </tbody>
         </table>
     </div>
+</div>
+
+<!-- Failed login attempts log -->
+<div class="fv-card mt-4">
+    <div class="fv-card-header">
+        <h5>Failed Login Attempts</h5>
+        <span style="font-size:.75rem;color:#94a3b8;">Last 100 events</span>
+    </div>
+    {% if attempt_log %}
+    <div class="table-responsive">
+        <table class="table fv-table">
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>IP Address</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for entry in attempt_log %}
+                <tr>
+                    <td>
+                        <div class="device-name">{{ entry["username"] }}</div>
+                    </td>
+                    <td style="font-family:monospace;font-size:.84rem;">{{ entry["ip_address"] or "—" }}</td>
+                    <td style="color:#94a3b8;font-size:.8rem;">{{ entry["attempted_at"] | dt }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="fv-card-body" style="color:#94a3b8;font-size:.84rem;">No failed attempts recorded.</div>
+    {% endif %}
 </div>
 
 <!-- Create user modal -->
@@ -89,9 +160,9 @@
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
-                        <label class="form-label">Email address</label>
-                        <input type="email" name="email" class="form-control"
-                               placeholder="user@example.com" required>
+                        <label class="form-label">Username</label>
+                        <input type="text" name="username" class="form-control"
+                               placeholder="username" required autocomplete="off">
                     </div>
                     <div class="mb-3">
                         <label class="form-label">Password</label>
@@ -114,4 +185,78 @@
         </form>
     </div>
 </div>
+
+<!-- Ban / Unban modal -->
+<div class="modal fade" id="toggleBanModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <form method="post" id="toggleBanForm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="toggleBanTitle"></h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p id="toggleBanBody" style="font-size:.84rem;color:#64748b;margin:0;"></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" id="toggleBanSubmit" class="btn-primary-fv"></button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Change password modal -->
+<div class="modal fade" id="changePasswordModal" tabindex="-1">
+    <div class="modal-dialog modal-sm">
+        <form method="post" id="changePasswordForm">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change Password</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p style="font-size:.84rem;color:#64748b;margin:0 0 1rem;">
+                        Setting new password for <strong id="changePasswordUsername"></strong>.
+                    </p>
+                    <div class="mb-3">
+                        <label class="form-label">New password</label>
+                        <input type="password" name="new_password" id="newPasswordInput"
+                               class="form-control" placeholder="••••••••" required>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn-ghost" data-bs-dismiss="modal">Cancel</button>
+                    <button type="submit" class="btn-primary-fv">Update password</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<style>
+    .danger-text { color: #dc2626; }
+    .danger-text:hover { color: #991b1b; }
+</style>
+<script>
+    function openToggleBan(userId, username, isBanned) {
+        document.getElementById('toggleBanTitle').textContent = isBanned ? 'Unban User' : 'Ban User';
+        document.getElementById('toggleBanBody').innerHTML = isBanned
+            ? 'Unban <strong>' + username + '</strong>? They will be able to log in again.'
+            : 'Ban <strong>' + username + '</strong>? They will not be able to log in.';
+        document.getElementById('toggleBanSubmit').textContent = isBanned ? 'Unban' : 'Ban';
+        document.getElementById('toggleBanForm').action = '/users/' + userId + '/toggle-ban';
+        new bootstrap.Modal(document.getElementById('toggleBanModal')).show();
+    }
+
+    function openChangePassword(userId, username) {
+        document.getElementById('changePasswordUsername').textContent = username;
+        document.getElementById('changePasswordForm').action = '/users/' + userId + '/change-password';
+        document.getElementById('newPasswordInput').value = '';
+        new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+    }
+</script>
 {% endblock %}
