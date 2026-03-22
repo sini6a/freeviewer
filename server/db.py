@@ -14,6 +14,7 @@ def _create_connection():
         charset="utf8mb4",
         autocommit=False,
         connect_timeout=10,
+        init_command="SET time_zone='+00:00'",
     )
 
 
