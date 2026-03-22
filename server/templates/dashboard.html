@@ -130,6 +130,7 @@
                             <form method="post"
                                   action="{{ url_for('devices.unblock_device', device_id=device['device_code']) }}"
                                   class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-ghost warning">
                                     <i class="bi bi-unlock"></i> Unblock
                                 </button>
@@ -147,6 +148,7 @@
                                   action="{{ url_for('devices.delete_device', device_id=device['device_code']) }}"
                                   onsubmit="return confirm('Delete {{ device['display_name'] }}? This cannot be undone.')"
                                   class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-icon danger" title="Delete">
                                     <i class="bi bi-trash"></i>
                                 </button>
@@ -171,6 +173,7 @@
 <div class="modal fade" id="renameModal-{{ device['device_code'] }}" tabindex="-1">
     <div class="modal-dialog modal-sm">
         <form method="post" action="{{ url_for('devices.rename_device', device_id=device['device_code']) }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Rename Device</h5>

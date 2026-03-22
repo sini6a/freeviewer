@@ -60,6 +60,7 @@
                         {% if user["id"] != g.user["id"] %}
                         <div class="d-flex gap-1 justify-content-end">
                             <form method="post" action="{{ url_for('users.toggle_admin', user_id=user['id']) }}" class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-ghost" title="{{ 'Remove admin' if user['role'] == 'admin' else 'Make admin' }}">
                                     {% if user["role"] == "admin" %}
                                     <i class="bi bi-shield-minus"></i> Remove admin
@@ -75,6 +76,7 @@
                             </button>
                             {% if user["locked_until"] %}
                             <form method="post" action="{{ url_for('users.unlock_user', user_id=user['id']) }}" class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-ghost" title="Unlock account">
                                     <i class="bi bi-unlock"></i>
                                 </button>
@@ -95,6 +97,7 @@
                                   data-username="{{ user['username'] }}"
                                   onsubmit="return confirm('Delete ' + this.dataset.username + '? Their devices will remain but become unowned.')"
                                   class="m-0">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                                 <button type="submit" class="btn-icon danger" title="Delete user">
                                     <i class="bi bi-trash"></i>
                                 </button>
@@ -153,6 +156,7 @@
 <div class="modal fade" id="createUserModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
         <form method="post" action="{{ url_for('users.create_user') }}">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Add User</h5>
@@ -190,6 +194,7 @@
 <div class="modal fade" id="toggleBanModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
         <form method="post" id="toggleBanForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="toggleBanTitle"></h5>
@@ -211,6 +216,7 @@
 <div class="modal fade" id="changePasswordModal" tabindex="-1">
     <div class="modal-dialog modal-sm">
         <form method="post" id="changePasswordForm">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Change Password</h5>

@@ -3,18 +3,28 @@ import pymysql.cursors
 from flask import g, current_app
 
 
+def _create_connection():
+    return pymysql.connect(
+        host=current_app.config["MYSQL_HOST"],
+        port=current_app.config["MYSQL_PORT"],
+        user=current_app.config["MYSQL_USER"],
+        password=current_app.config["MYSQL_PASSWORD"],
+        database=current_app.config["MYSQL_DATABASE"],
+        cursorclass=pymysql.cursors.DictCursor,
+        charset="utf8mb4",
+        autocommit=False,
+        connect_timeout=10,
+    )
+
+
 def get_db():
     if "db" not in g:
-        g.db = pymysql.connect(
-            host=current_app.config["MYSQL_HOST"],
-            port=current_app.config["MYSQL_PORT"],
-            user=current_app.config["MYSQL_USER"],
-            password=current_app.config["MYSQL_PASSWORD"],
-            database=current_app.config["MYSQL_DATABASE"],
-            cursorclass=pymysql.cursors.DictCursor,
-            charset="utf8mb4",
-            autocommit=False,
-        )
+        g.db = _create_connection()
+    else:
+        try:
+            g.db.ping(reconnect=True)
+        except Exception:
+            g.db = _create_connection()
     return g.db
 
 

@@ -28,7 +28,7 @@
                     on your remote machine.
                 </p>
 
-                <form method="post">
+                <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <button type="submit" class="btn-primary-fv w-100 justify-content-center"
                             style="padding:.6rem;font-size:.875rem;">
                         <i class="bi bi-plus-circle"></i> Generate new code

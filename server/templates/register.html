@@ -13,7 +13,7 @@
         Create the admin account. This can only be done once.
     </p>
 
-    <form method="post">
+    <form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <div class="mb-3">
             <label class="form-label">Username</label>
             <input type="text" name="username" class="form-control"

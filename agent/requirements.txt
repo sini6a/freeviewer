@@ -1,0 +1,9 @@
+aiortc==1.14.0
+aiohttp==3.13.3
+mss==10.1.0
+numpy==2.4.3
+opencv-python==4.13.0.92
+PyAutoGUI==0.9.54
+pynput==1.8.1
+python-socketio[client]==5.16.1
+python-dotenv==1.2.2

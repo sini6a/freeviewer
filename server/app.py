@@ -6,10 +6,10 @@ from pathlib import Path
 import pymysql
 import pymysql.cursors
 from dotenv import load_dotenv
-from flask import Flask, g, session
+from flask import Flask, g, render_template, session
 
 from .db import close_db, init_db, query_one
-from .extensions import agent_sids, socketio
+from .extensions import agent_sids, csrf, socketio
 from .utils import fmt_dt, get_setting
 
 load_dotenv(Path(__file__).parent / ".env")
@@ -24,14 +24,25 @@ log = logging.getLogger("freeviewer")
 
 def create_app() -> Flask:
     app = Flask(__name__)
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY") or "change-me-in-production"
+
+    secret = os.environ.get("SECRET_KEY", "").strip()
+    if not secret:
+        raise RuntimeError("SECRET_KEY environment variable must be set before running in production.")
+    app.config["SECRET_KEY"] = secret
+
     app.config["MYSQL_HOST"]     = os.environ.get("MYSQL_HOST", "127.0.0.1")
     app.config["MYSQL_PORT"]     = int(os.environ.get("MYSQL_PORT", "3306"))
     app.config["MYSQL_USER"]     = os.environ.get("MYSQL_USER", "freeviewer")
     app.config["MYSQL_PASSWORD"] = os.environ.get("MYSQL_PASSWORD", "")
     app.config["MYSQL_DATABASE"] = os.environ.get("MYSQL_DATABASE", "freeviewer")
 
+    # Session cookie security
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+    app.config["SESSION_COOKIE_SECURE"]   = os.environ.get("SESSION_COOKIE_SECURE", "true").lower() == "true"
+
     app.jinja_env.filters["dt"] = fmt_dt
+    csrf.init_app(app)
     app.teardown_appcontext(close_db)
 
     @app.before_request
@@ -63,6 +74,18 @@ def create_app() -> Flask:
 
     # Register socket handlers (imports trigger decorator registration)
     from . import sockets  # noqa: F401
+
+    @app.errorhandler(404)
+    def not_found(e):
+        return render_template("errors/404.html"), 404
+
+    @app.errorhandler(500)
+    def server_error(e):
+        return render_template("errors/500.html"), 500
+
+    @app.errorhandler(403)
+    def forbidden(e):
+        return render_template("errors/403.html"), 403
 
     socketio.init_app(app)
 
