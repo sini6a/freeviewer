@@ -154,9 +154,9 @@ def load_creds():
 def save_creds(token):
     CREDS_FILE.write_text(json.dumps({"device_id": device_id, "device_token": token}))
 
-MAX_WIDTH  = 1920
-MAX_HEIGHT = 1080
-TARGET_FPS = 20
+MAX_WIDTH  = 3840
+MAX_HEIGHT = 2160
+TARGET_FPS = 30
 
 
 class ScreenShareTrack(VideoStreamTrack):
@@ -164,9 +164,11 @@ class ScreenShareTrack(VideoStreamTrack):
 
     STATS_INTERVAL = 10.0
 
-    def __init__(self):
+    def __init__(self, max_width=MAX_WIDTH, max_height=MAX_HEIGHT, framerate=TARGET_FPS):
         super().__init__()
-        self._framerate    = TARGET_FPS
+        self._max_width    = max_width
+        self._max_height   = max_height
+        self._framerate    = framerate
         self._latest       = None
         self._lock         = threading.Lock()
         self._running      = True
@@ -191,7 +193,7 @@ class ScreenShareTrack(VideoStreamTrack):
             img = np.array(sct.grab(monitor))
             img = cv2.cvtColor(img, cv2.COLOR_BGRA2BGR)
             h, w = img.shape[:2]
-            scale = min(MAX_WIDTH / w, MAX_HEIGHT / h, 1.0)
+            scale = min(self._max_width / w, self._max_height / h, 1.0)
             if scale < 1.0:
                 img = cv2.resize(img, (int(w * scale), int(h * scale)),
                                  interpolation=cv2.INTER_LINEAR)
@@ -299,7 +301,12 @@ async def on_signal(data):
         await pc.close()
 
     pc = RTCPeerConnection(configuration=_build_rtc_config(data.get('ice_servers', [])))
-    pc.addTrack(ScreenShareTrack())
+    capture = data.get('capture_settings', {})
+    pc.addTrack(ScreenShareTrack(
+        max_width=capture.get('max_width') or MAX_WIDTH,
+        max_height=capture.get('max_height') or MAX_HEIGHT,
+        framerate=capture.get('fps') or TARGET_FPS,
+    ))
 
     @pc.on("datachannel")
     def on_datachannel(channel):

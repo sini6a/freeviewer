@@ -97,17 +97,8 @@ SERVER_DEFAULT  = os.environ.get("SERVER_URL", "http://127.0.0.1:5000")
 CREDS_FILE      = Path(__file__).parent / "agent_creds.json"
 SETTINGS_FILE   = Path(__file__).parent / "agent_settings.json"
 
-RESOLUTION_OPTIONS = {
-    "HD (1280×720)":       (1280, 720),
-    "Full HD (1920×1080)": (1920, 1080),
-    "2K (2560×1440)":      (2560, 1440),
-    "Native (no limit)":   (99999, 99999),
-}
-FPS_OPTIONS = [10, 15, 20, 25, 30]
 DEFAULT_SETTINGS = {
     "server_url": SERVER_DEFAULT,
-    "resolution": "HD (1280×720)",
-    "target_fps": 15,
 }
 
 
@@ -591,44 +582,9 @@ class AgentApp:
         url_entry.bind("<FocusIn>",  lambda _: url_border.configure(bg=ACCENT))
         url_entry.bind("<FocusOut>", lambda _: url_border.configure(bg=BORDER))
 
-        # Resolution + FPS row
-        opts_row = tk.Frame(self._settings_body, bg=CARD)
-        opts_row.pack(fill="x", pady=(0, 8))
-
-        # Resolution dropdown
-        res_col = tk.Frame(opts_row, bg=CARD)
-        res_col.pack(side="left", fill="x", expand=True, padx=(0, 6))
-        label(res_col, "RESOLUTION", bg=CARD).pack(anchor="w")
-        self._res_var = tk.StringVar(value=self._settings["resolution"])
-        res_menu = tk.OptionMenu(res_col, self._res_var, *RESOLUTION_OPTIONS.keys())
-        res_menu.config(bg=CARD, fg=TEXT, activebackground=BORDER,
-                        activeforeground=TEXT, relief="flat",
-                        font=("Segoe UI", 9), highlightthickness=1,
-                        highlightbackground=BORDER, bd=0, cursor="hand2")
-        res_menu["menu"].config(bg=CARD, fg=TEXT, activebackground=ACCENT,
-                                activeforeground="white", relief="flat")
-        res_menu.pack(fill="x", pady=(2, 0))
-
-        # FPS dropdown
-        fps_col = tk.Frame(opts_row, bg=CARD)
-        fps_col.pack(side="left", padx=(0, 6))
-        label(fps_col, "FPS", bg=CARD).pack(anchor="w")
-        self._fps_var = tk.StringVar(value=str(self._settings["target_fps"]))
-        fps_menu = tk.OptionMenu(fps_col, self._fps_var,
-                                 *[str(f) for f in FPS_OPTIONS])
-        fps_menu.config(bg=CARD, fg=TEXT, activebackground=BORDER,
-                        activeforeground=TEXT, relief="flat",
-                        font=("Segoe UI", 9), highlightthickness=1,
-                        highlightbackground=BORDER, bd=0, cursor="hand2", width=4)
-        fps_menu["menu"].config(bg=CARD, fg=TEXT, activebackground=ACCENT,
-                                activeforeground="white", relief="flat")
-        fps_menu.pack(pady=(2, 0))
-
         # Save button
-        save_col = tk.Frame(opts_row, bg=CARD)
-        save_col.pack(side="left", anchor="s")
-        make_btn(save_col, "Save", self._on_save_settings,
-                 padx=14, pady=5).pack(pady=(2, 0))
+        make_btn(self._settings_body, "Save", self._on_save_settings,
+                 padx=14, pady=5).pack(anchor="w", pady=(0, 8))
 
         # Keep a ref for show_pair ordering
         self._url_sec = settings_card
@@ -727,13 +683,8 @@ class AgentApp:
 
     def _on_save_settings(self):
         self._settings["server_url"] = self._url_var.get().strip()
-        self._settings["resolution"] = self._res_var.get()
-        self._settings["target_fps"] = int(self._fps_var.get())
         save_settings(self._settings)
-        self._append_log(
-            f"Settings saved — {self._settings['resolution']}, "
-            f"{self._settings['target_fps']} fps, {self._settings['server_url']}"
-        )
+        self._append_log(f"Settings saved — {self._settings['server_url']}")
 
     def _on_pair_click(self):
         code = self._code_var.get().strip()
@@ -865,11 +816,14 @@ class AgentApp:
                     configuration=_build_rtc_config(data.get("ice_servers", []))
                 )
                 self._pc = pc
-                max_w, max_h = RESOLUTION_OPTIONS[self._settings["resolution"]]
+                capture = data.get("capture_settings", {})
+                max_w = capture.get("max_width") or 3840
+                max_h = capture.get("max_height") or 2160
+                fps   = capture.get("fps") or 30
                 track = ScreenShareTrack(
                     max_width=max_w,
                     max_height=max_h,
-                    framerate=self._settings["target_fps"],
+                    framerate=fps,
                     log_cb=self.alog,
                 )
                 self._track = track
@@ -935,4 +889,14 @@ class AgentApp:
 
 
 if __name__ == "__main__":
+    # ── Single-instance guard ──────────────────────────────────────────────────
+    _MUTEX_NAME = "FreeViewerAgent_SingleInstance"
+    _mutex_handle = ctypes.windll.kernel32.CreateMutexW(None, False, _MUTEX_NAME)
+    if ctypes.windll.kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        hwnd = ctypes.windll.user32.FindWindowW(None, "FreeViewer Agent")
+        if hwnd:
+            ctypes.windll.user32.ShowWindow(hwnd, 9)       # SW_RESTORE
+            ctypes.windll.user32.SetForegroundWindow(hwnd)
+        sys.exit(0)
+    # ── Launch ─────────────────────────────────────────────────────────────────
     AgentApp().run()
