@@ -67,12 +67,14 @@ def create_app() -> Flask:
     from .routes.devices import bp as devices_bp
     from .routes.users import bp as users_bp
     from .routes.settings import bp as settings_bp
+    from .routes.download import bp as download_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(dashboard_bp)
     app.register_blueprint(devices_bp)
     app.register_blueprint(users_bp)
     app.register_blueprint(settings_bp)
+    app.register_blueprint(download_bp)
 
     # Register socket handlers (imports trigger decorator registration)
     from . import sockets  # noqa: F401

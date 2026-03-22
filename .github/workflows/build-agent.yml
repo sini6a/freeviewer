@@ -1,0 +1,40 @@
+name: Build Windows Agent
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'agent/**'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: |
+          pip install -r agent/requirements.txt
+          pip install pyinstaller
+
+      - name: Build executable
+        run: |
+          cd agent
+          pyinstaller --onefile --windowed --name FreeViewer agent_gui.py
+
+      - name: Publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete latest --yes 2>$null || true
+          git tag -d latest 2>$null || true
+          git push origin :refs/tags/latest 2>$null || true
+          gh release create latest agent/dist/FreeViewer.exe `
+            --title "Latest Build" `
+            --notes "Built from commit ${{ github.sha }}"
