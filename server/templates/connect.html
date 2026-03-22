@@ -102,7 +102,17 @@
 
         pc = new RTCPeerConnection({ iceServers });
         dc = pc.createDataChannel("control");
-        pc.addTransceiver('video', { direction: 'recvonly' });
+        const transceiver = pc.addTransceiver('video', { direction: 'recvonly' });
+
+        // Prefer H.264 over VP8 — better compression, hardware-decodable on most devices
+        try {
+            const caps = RTCRtpReceiver.getCapabilities('video');
+            if (caps) {
+                const h264 = caps.codecs.filter(c => c.mimeType === 'video/H264');
+                const rest = caps.codecs.filter(c => c.mimeType !== 'video/H264');
+                if (h264.length) transceiver.setCodecPreferences([...h264, ...rest]);
+            }
+        } catch (_) {}
 
         pc.oniceconnectionstatechange = () => {
             dbg('ICE state: ' + pc.iceConnectionState);
