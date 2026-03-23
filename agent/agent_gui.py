@@ -6,6 +6,7 @@ import json
 import os
 import queue
 import socket
+import ssl
 import subprocess
 import sys
 import threading
@@ -99,6 +100,7 @@ SETTINGS_FILE   = Path(__file__).parent / "agent_settings.json"
 
 DEFAULT_SETTINGS = {
     "server_url": SERVER_DEFAULT,
+    "verify_ssl": True,
 }
 
 
@@ -582,6 +584,18 @@ class AgentApp:
         url_entry.bind("<FocusIn>",  lambda _: url_border.configure(bg=ACCENT))
         url_entry.bind("<FocusOut>", lambda _: url_border.configure(bg=BORDER))
 
+        # SSL verification checkbox
+        self._verify_ssl_var = tk.BooleanVar(value=self._settings.get("verify_ssl", True))
+        ssl_row = tk.Frame(self._settings_body, bg=CARD)
+        ssl_row.pack(fill="x", pady=(0, 6))
+        tk.Checkbutton(
+            ssl_row, text="Verify SSL certificate", variable=self._verify_ssl_var,
+            bg=CARD, fg=TEXT, activebackground=CARD, activeforeground=TEXT,
+            selectcolor=CARD, font=("Segoe UI", 9),
+        ).pack(side="left")
+        label(ssl_row, "  (uncheck for self-signed / corp certs)", fg=MUTED,
+              font=("Segoe UI", 8), bg=CARD).pack(side="left")
+
         # Save button
         make_btn(self._settings_body, "Save", self._on_save_settings,
                  padx=14, pady=5).pack(anchor="w", pady=(0, 8))
@@ -683,6 +697,7 @@ class AgentApp:
 
     def _on_save_settings(self):
         self._settings["server_url"] = self._url_var.get().strip()
+        self._settings["verify_ssl"] = self._verify_ssl_var.get()
         save_settings(self._settings)
         self._append_log(f"Settings saved — {self._settings['server_url']}")
 
@@ -884,9 +899,16 @@ class AgentApp:
                 self.alog(f"WebRTC setup error: {e}")
                 self.astatus("Paired & Online", SUCCESS)
 
+        verify_ssl = self._settings.get("verify_ssl", True)
+        if not verify_ssl:
+            ssl_ctx = False  # disable verification
+        else:
+            # Use the OS certificate store (works with Let's Encrypt, corp CAs, etc.)
+            ssl_ctx = ssl.create_default_context()
+
         while True:
             try:
-                await sio.connect(server_url)
+                await sio.connect(server_url, ssl=ssl_ctx)
                 break
             except Exception as e:
                 self.alog(f"Could not reach server ({e}). Retrying in 5s…")
