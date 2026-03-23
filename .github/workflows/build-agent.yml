@@ -36,12 +36,16 @@ jobs:
       - name: Build executable
         run: |
           cd agent
-          pyinstaller --onefile --windowed --name FreeViewer agent_gui.py
+          pyinstaller --onedir --windowed --name FreeViewer agent_gui.py
+
+      - name: Zip output
+        run: |
+          Compress-Archive -Path agent/dist/FreeViewer/* -DestinationPath agent/dist/FreeViewer.zip
 
       - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ steps.ver.outputs.version }}" agent/dist/FreeViewer.exe `
+          gh release create "v${{ steps.ver.outputs.version }}" agent/dist/FreeViewer.zip `
             --title "v${{ steps.ver.outputs.version }}" `
             --notes "Built from commit ${{ github.sha }}"

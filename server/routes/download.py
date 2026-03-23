@@ -24,5 +24,5 @@ def download_win():
     except Exception:
         pass
 
-    url = f"https://github.com/{GITHUB_REPO}/releases/latest/download/FreeViewer.exe"
+    url = f"https://github.com/{GITHUB_REPO}/releases/latest/download/FreeViewer.zip"
     return render_template("download.html", download_url=url, version=version)
