@@ -94,8 +94,10 @@ screen_width, screen_height = pyautogui.size()
 device_name     = socket.gethostname()
 device_id       = f"dev_{device_name.lower()}"
 SERVER_DEFAULT  = os.environ.get("SERVER_URL", "http://127.0.0.1:5000")
-CREDS_FILE      = Path(__file__).parent / "agent_creds.json"
-SETTINGS_FILE   = Path(__file__).parent / "agent_settings.json"
+DATA_DIR        = Path(os.environ.get("APPDATA", Path.home())) / "FreeViewer"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+CREDS_FILE      = DATA_DIR / "agent_creds.json"
+SETTINGS_FILE   = DATA_DIR / "agent_settings.json"
 
 DEFAULT_SETTINGS = {
     "server_url": SERVER_DEFAULT,
